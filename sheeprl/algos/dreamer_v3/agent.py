@@ -342,7 +342,7 @@ class RecurrentModel(nn.Module):
 
 
 class RSSM(nn.Module):
-    """RSSM model for the model-base Dreamer agent.
+    """RSSM model for the model-base Dreamer agent. for observation!!! for training worldmodel!
 
     Args:
         recurrent_model (nn.Module): the recurrent model of the RSSM model described in
@@ -499,7 +499,7 @@ class RSSM(nn.Module):
 
 
 class DecoupledRSSM(RSSM):
-    """RSSM model for the model-base Dreamer agent.
+    """RSSM model for the model-base Dreamer agent. for no observation!!! for training actor!
 
     Args:
         recurrent_model (nn.Module): the recurrent model of the RSSM model described in

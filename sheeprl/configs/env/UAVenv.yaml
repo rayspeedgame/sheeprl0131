@@ -1,0 +1,20 @@
+defaults:
+  - default
+  - _self_
+
+# Override from `default` config
+id: uav
+max_episode_steps: ${env.max_steps}  # 对应你的config.json中的max_steps
+# 建议关闭的参数（UAV环境不需要）
+screen_size: 0
+grayscale: False
+clip_rewards: False
+capture_video: False
+reward_as_observation: False  # 除非需要将奖励作为观测
+actions_as_observation:
+  num_stack: -1  # 禁用动作观测
+wrapper:
+  _target_: sheeprl.envs.UAVenv.UAVEnvWrapper
+  config_path: "config.json"  # 你的配置文件路径
+  seed: ${seed}
+
