@@ -181,7 +181,7 @@ class UAVEnvWrapper(gym.Env):
         
         # 仅返回人群密度信息
         return {
-            "density_matrix": observed_density
+            "density_matrix": observed_density.astype(np.float32)
         }
 
     def get_uav_positions(self):

@@ -20,17 +20,19 @@ checkpoint:
 
 # Buffer
 buffer:
-  size: 500_000
+  size: 500000
   checkpoint: True
   memmap: True
 
 # Algorithm
 algo:
-  total_steps: 500_000
+  total_steps: 50000
   cnn_keys:
     encoder: []
+    decoder: ${algo.cnn_keys.encoder}
   mlp_keys:
     encoder: [density_matrix]
+    decoder: ${algo.mlp_keys.encoder}
   learning_starts: 1300
   
 
