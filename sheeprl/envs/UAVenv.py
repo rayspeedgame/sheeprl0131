@@ -37,8 +37,8 @@ class UAVEnvWrapper(gym.Env):
             "density_matrix": spaces.Box(
                 low=0,
                 high=self.config["max_density"],
-                shape=(self.density_size, self.density_size),
-                dtype=np.int32
+                shape=(1, self.density_size, self.density_size),  # 添加通道维度
+                dtype=np.float32
             )
         })
         
@@ -173,16 +173,23 @@ class UAVEnvWrapper(gym.Env):
         frame_id = int(self.current_step * self.fps)
         
         # 获取观测到的密度矩阵
-        observed_density, _ = get_observed_density(
+        observed_density, observation_mask = get_observed_density(
             frame_id, 
             self.uav_states, 
             self.density_size, 
             self.density_size
         )
         
-        # 仅返回人群密度信息
+        # 将密度矩阵增加一个通道维度 [height, width] -> [1, height, width]
+        observed_density = observed_density.astype(np.float32)[np.newaxis, :, :]
+        
+        # 可选：也可以将观测掩码作为第二个通道
+        # observation_mask = observation_mask.astype(np.float32)[np.newaxis, :, :]
+        # combined_obs = np.concatenate([observed_density, observation_mask], axis=0)
+        
+        # 仅返回人群密度信息（带通道维度）
         return {
-            "density_matrix": observed_density.astype(np.float32)
+            "density_matrix": observed_density
         }
 
     def get_uav_positions(self):
