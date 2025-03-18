@@ -560,15 +560,31 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
     
     # 保存初始info中的数据
     if "uav_positions" in info:
-        step_data["uav_positions"] = info["uav_positions"][np.newaxis]
+        # 将列表中的数组堆叠成一个大数组
+        uav_positions = np.stack(info["uav_positions"])  # 形状变为 (num_envs, n_uav, 3)
+        step_data["uav_positions"] = uav_positions[np.newaxis]  # 添加时间维度，变为 (1, num_envs, n_uav, 3)
     if "full_density" in info:
-        step_data["full_density"] = info["full_density"][np.newaxis]
+        # 同样处理full_density
+        full_density = np.stack(info["full_density"])  # 形状变为 (num_envs, density_size, density_size)
+        step_data["full_density"] = full_density[np.newaxis]  # 添加时间维度，变为 (1, num_envs, density_size, density_size)
     if "frame_id" in info:
-        step_data["frame_id"] = np.array([[[info["frame_id"]]]])
+        # frame_id可能是单个值，确保转换为数组
+        frame_id = np.array(info["frame_id"])
+        if frame_id.ndim == 0:
+            frame_id = frame_id[np.newaxis]
+        step_data["frame_id"] = frame_id[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
     if "observed_ratio" in info:
-        step_data["observed_ratio"] = np.array([[[info["observed_ratio"]]]])
+        # 处理observed_ratio
+        observed_ratio = np.array(info["observed_ratio"])
+        if observed_ratio.ndim == 0:
+            observed_ratio = observed_ratio[np.newaxis]
+        step_data["observed_ratio"] = observed_ratio[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
     if "observed_area_ratio" in info:
-        step_data["observed_area_ratio"] = np.array([[[info["observed_area_ratio"]]]])
+        # 处理observed_area_ratio
+        area_ratio = np.array(info["observed_area_ratio"])
+        if area_ratio.ndim == 0:
+            area_ratio = area_ratio[np.newaxis]
+        step_data["observed_area_ratio"] = area_ratio[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
     
     player.init_states()
 
@@ -619,19 +635,36 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                 
                 # 保存step返回的info数据
                 if "uav_positions" in infos:
-                    # 确保是float32类型的numpy数组
-                    uav_positions = np.asarray(infos["uav_positions"], dtype=np.float32)
-                    step_data["uav_positions"] = uav_positions.reshape((1, cfg.env.num_envs, -1))
+                    # 将列表中的数组堆叠成一个大数组
+                    # infos["uav_positions"]是一个列表，每个元素是一个环境的uav_positions数组
+                    uav_positions = np.stack(infos["uav_positions"])  # 形状变为 (num_envs, n_uav, 3)
+                    step_data["uav_positions"] = uav_positions[np.newaxis]  # 添加时间维度，变为 (1, num_envs, n_uav, 3)
+
                 if "full_density" in infos:
-                    # 确保是float32类型的numpy数组
-                    full_density = np.asarray(infos["full_density"], dtype=np.float32)
-                    step_data["full_density"] = full_density.reshape((1, cfg.env.num_envs, *full_density.shape[1:]))
+                    # 同样处理full_density
+                    full_density = np.stack(infos["full_density"])  # 形状变为 (num_envs, density_size, density_size)
+                    step_data["full_density"] = full_density[np.newaxis]  # 添加时间维度，变为 (1, num_envs, density_size, density_size)
+
                 if "frame_id" in infos:
-                    step_data["frame_id"] = np.array([[[infos["frame_id"]]]], dtype=np.int32)
+                    # frame_id可能是单个值，确保转换为数组
+                    frame_id = np.array(infos["frame_id"])
+                    if frame_id.ndim == 0:
+                        frame_id = frame_id[np.newaxis]
+                    step_data["frame_id"] = frame_id[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
+
                 if "observed_ratio" in infos:
-                    step_data["observed_ratio"] = np.array([[[infos["observed_ratio"]]]], dtype=np.float32)
+                    # 处理observed_ratio
+                    observed_ratio = np.array(infos["observed_ratio"])
+                    if observed_ratio.ndim == 0:
+                        observed_ratio = observed_ratio[np.newaxis]
+                    step_data["observed_ratio"] = observed_ratio[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
+
                 if "observed_area_ratio" in infos:
-                    step_data["observed_area_ratio"] = np.array([[[infos["observed_area_ratio"]]]], dtype=np.float32)
+                    # 处理observed_area_ratio
+                    area_ratio = np.array(infos["observed_area_ratio"])
+                    if area_ratio.ndim == 0:
+                        area_ratio = area_ratio[np.newaxis]
+                    step_data["observed_area_ratio"] = area_ratio[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
 
             step_data["is_first"] = np.zeros_like(step_data["terminated"])
             if "restart_on_exception" in infos:
