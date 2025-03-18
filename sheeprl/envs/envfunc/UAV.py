@@ -109,7 +109,7 @@ def get_observed_density(frame_id, uav_positions, grid_rows=10, grid_cols=10, fl
             - observed_density: 观测到的人群密度矩阵 (grid_rows x grid_cols)
             - observation_mask: 观测掩码，指示哪些区域被观测到 (grid_rows x grid_cols)
     """
-    from sheeprl.envs.envfunc.Crowd import get_crowd_density
+
     
     # 获取人群密度信息
     density_matrix = get_crowd_density(grid_cols, grid_rows, frame_id)
