@@ -1034,7 +1034,7 @@ def build_agent(
     encoder = MultiEncoder(cnn_encoder, mlp_encoder)
 
     recurrent_model = RecurrentModel(
-        input_size=int(sum(actions_dim) + stochastic_size),
+        input_size=int(stochastic_size), #去除action输入的尺寸
         recurrent_state_size=world_model_cfg.recurrent_model.recurrent_state_size,
         dense_units=world_model_cfg.recurrent_model.dense_units,
         layer_norm_cls=hydra.utils.get_class(world_model_cfg.recurrent_model.layer_norm.cls),
