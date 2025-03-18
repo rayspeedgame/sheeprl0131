@@ -619,9 +619,13 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                 
                 # 保存step返回的info数据
                 if "uav_positions" in infos:
-                    step_data["uav_positions"] = np.array(infos["uav_positions"], dtype=np.float32).reshape((1, cfg.env.num_envs, -1))
+                    # 确保是float32类型的numpy数组
+                    uav_positions = np.asarray(infos["uav_positions"], dtype=np.float32)
+                    step_data["uav_positions"] = uav_positions.reshape((1, cfg.env.num_envs, -1))
                 if "full_density" in infos:
-                    step_data["full_density"] = np.array(infos["full_density"], dtype=np.float32).reshape((1, cfg.env.num_envs, *infos["full_density"].shape[1:]))
+                    # 确保是float32类型的numpy数组
+                    full_density = np.asarray(infos["full_density"], dtype=np.float32)
+                    step_data["full_density"] = full_density.reshape((1, cfg.env.num_envs, *full_density.shape[1:]))
                 if "frame_id" in infos:
                     step_data["frame_id"] = np.array([[[infos["frame_id"]]]], dtype=np.int32)
                 if "observed_ratio" in infos:
