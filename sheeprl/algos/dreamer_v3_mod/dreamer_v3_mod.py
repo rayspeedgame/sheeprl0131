@@ -619,15 +619,15 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                 
                 # 保存step返回的info数据
                 if "uav_positions" in infos:
-                    step_data["uav_positions"] = infos["uav_positions"].reshape((1, cfg.env.num_envs, -1))
+                    step_data["uav_positions"] = np.array(infos["uav_positions"], dtype=np.float32).reshape((1, cfg.env.num_envs, -1))
                 if "full_density" in infos:
-                    step_data["full_density"] = infos["full_density"].reshape((1, cfg.env.num_envs, *infos["full_density"].shape[1:]))
+                    step_data["full_density"] = np.array(infos["full_density"], dtype=np.float32).reshape((1, cfg.env.num_envs, *infos["full_density"].shape[1:]))
                 if "frame_id" in infos:
-                    step_data["frame_id"] = np.array([[[infos["frame_id"]]]])
+                    step_data["frame_id"] = np.array([[[infos["frame_id"]]]], dtype=np.int32)
                 if "observed_ratio" in infos:
-                    step_data["observed_ratio"] = np.array([[[infos["observed_ratio"]]]])
+                    step_data["observed_ratio"] = np.array([[[infos["observed_ratio"]]]], dtype=np.float32)
                 if "observed_area_ratio" in infos:
-                    step_data["observed_area_ratio"] = np.array([[[infos["observed_area_ratio"]]]])
+                    step_data["observed_area_ratio"] = np.array([[[infos["observed_area_ratio"]]]], dtype=np.float32)
 
             step_data["is_first"] = np.zeros_like(step_data["terminated"])
             if "restart_on_exception" in infos:
@@ -688,15 +688,15 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                 
                 # 为重置的环境保存info数据
                 if "uav_positions" in step_data:
-                    reset_data["uav_positions"] = step_data["uav_positions"][:, dones_idxes]
+                    reset_data["uav_positions"] = np.array(step_data["uav_positions"][:, dones_idxes], dtype=np.float32)
                 if "full_density" in step_data:
-                    reset_data["full_density"] = step_data["full_density"][:, dones_idxes]
+                    reset_data["full_density"] = np.array(step_data["full_density"][:, dones_idxes], dtype=np.float32)
                 if "frame_id" in step_data:
-                    reset_data["frame_id"] = step_data["frame_id"][:, dones_idxes]
+                    reset_data["frame_id"] = np.array(step_data["frame_id"][:, dones_idxes], dtype=np.int32)
                 if "observed_ratio" in step_data:
-                    reset_data["observed_ratio"] = step_data["observed_ratio"][:, dones_idxes]
+                    reset_data["observed_ratio"] = np.array(step_data["observed_ratio"][:, dones_idxes], dtype=np.float32)
                 if "observed_area_ratio" in step_data:
-                    reset_data["observed_area_ratio"] = step_data["observed_area_ratio"][:, dones_idxes]
+                    reset_data["observed_area_ratio"] = np.array(step_data["observed_area_ratio"][:, dones_idxes], dtype=np.float32)
                 
                 rb.add(reset_data, dones_idxes, validate_args=cfg.buffer.validate_args)
 
