@@ -88,11 +88,12 @@ class UAVEnvWrapper(gym.Env):
         observed_area_ratio = observed_area / total_area
         
         return {
-            "uav_positions": self.uav_positions.copy(),
-            "full_density": full_density,
+            # 确保返回的是numpy数组类型
+            "uav_positions": np.array(self.uav_positions, dtype=np.float32),
+            "full_density": np.array(full_density, dtype=np.float32),
             "frame_id": frame_id,
-            "observed_ratio": observed_ratio,
-            "observed_area_ratio": observed_area_ratio
+            "observed_ratio": np.float32(observed_ratio),
+            "observed_area_ratio": np.float32(observed_area_ratio)
         }
 
     def reset(self, seed=None, options=None):
