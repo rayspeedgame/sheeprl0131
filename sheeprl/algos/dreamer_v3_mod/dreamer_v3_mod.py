@@ -109,7 +109,7 @@ def train(
     # Given how the environment interaction works, we remove the last actions
     # and add the first one as the zero action
     batch_actions = torch.cat((torch.zeros_like(data["actions"][:1]), data["actions"][:-1]), dim=0)
-    batch_positions = data["positions"]
+    batch_positions = data["uav_positions"]
     # 获取形状信息
     seq_len, batch_size, n_uav, coords = batch_positions.shape
     # 重塑张量，将最后两个维度展平

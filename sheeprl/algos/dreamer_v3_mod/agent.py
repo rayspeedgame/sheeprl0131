@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 from lightning.fabric import Fabric
 from lightning.fabric.wrappers import _FabricModule
+from sympy import false
 from torch import Tensor, nn
 from torch.distributions import (
     Distribution,
@@ -1003,7 +1004,8 @@ def build_agent(
     latent_state_size = stochastic_size + recurrent_state_size  # 不能在此处修改 reward网络输入尺寸加入action尺寸
 
     # Define models
-    if hasattr(cfg.env, 'screen_size'):
+    # if hasattr(cfg.env, 'screen_size'):
+    if false:
         # 对于标准图像环境
         cnn_stages = int(np.log2(cfg.env.screen_size) - np.log2(4))
     else:

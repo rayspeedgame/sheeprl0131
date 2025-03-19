@@ -28,10 +28,10 @@ buffer:
 algo:
   total_steps: 50000
   cnn_keys:
-    encoder: []
+    encoder: [density_matrix]
     decoder: ${algo.cnn_keys.encoder}
   mlp_keys:
-    encoder: [density_matrix]
+    encoder: []
     decoder: ${algo.mlp_keys.encoder}
   learning_starts: 1300
   

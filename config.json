@@ -1,9 +1,9 @@
 {
     "n_uav": 3,
     "max_steps": 10000,
-    "fps": 30,
+    "fps": 1,
     "boundary": [[0,0,0], [100,100,50]],
-    "density_matrix_size": 20,
+    "density_matrix_size": 256,
     "max_density": 10,
     "min_action": -1.0,
     "max_action": 1.0,
