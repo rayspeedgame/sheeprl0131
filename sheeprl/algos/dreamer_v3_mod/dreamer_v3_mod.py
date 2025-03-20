@@ -98,7 +98,7 @@ def train(
     batch_obs = {k: data[k] / 255.0 - 0.5 for k in cfg.algo.cnn_keys.encoder} # 考虑删除归一化                                                                                                                                                                                                             
     batch_obs.update({k: data[k] for k in cfg.algo.mlp_keys.encoder})
     # 创建batch_full_obs，包含完整的人群分布数据
-    batch_full_obs = {"full_density": data["full_density"]} if "full_density" in data else {}
+    batch_full_obs = {"density_matrix": data["full_density"].unsqueeze(2)} if "full_density" in data else {}
 
     # 单独提取观测比例信息
     observed_ratio = data["observed_ratio"] if "observed_ratio" in data else None
@@ -173,8 +173,10 @@ def train(
     )
 
     # Compute the distribution over the rewards
+    #
+    reward_model_combined_input = torch.cat([latent_states, batch_positions], dim=-1)
     # pr = TwoHotEncodingDistribution(world_model.reward_model(latent_states,batch_actions), dims=1) # 需要加入action或者position
-    pr = TwoHotEncodingDistribution(world_model.reward_model(latent_states,batch_positions), dims=1) # 需要加入action或者position
+    pr = TwoHotEncodingDistribution(world_model.reward_model(reward_model_combined_input), dims=1) # 需要加入action或者position
 
     # Compute the distribution over the terminal steps, if required
     pc = Independent(BernoulliSafeMode(logits=world_model.continue_model(latent_states)), 1) # 可能可以删除

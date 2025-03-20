@@ -6,8 +6,8 @@ defaults:
 id: uav
 max_episode_steps: 10000  # 对应你的config.json中的max_steps
 # 建议关闭的参数（UAV环境不需要）
-screen_size: 4
-grayscale: False
+screen_size: 256
+grayscale: True
 clip_rewards: False
 capture_video: False
 reward_as_observation: False  # 除非需要将奖励作为观测

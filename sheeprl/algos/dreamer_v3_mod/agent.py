@@ -1004,8 +1004,7 @@ def build_agent(
     latent_state_size = stochastic_size + recurrent_state_size  # 不能在此处修改 reward网络输入尺寸加入action尺寸
 
     # Define models
-    # if hasattr(cfg.env, 'screen_size'):
-    if false:
+    if hasattr(cfg.env, 'screen_size'):
         # 对于标准图像环境
         cnn_stages = int(np.log2(cfg.env.screen_size) - np.log2(4))
     else:
