@@ -25,10 +25,10 @@ class UAVEnvWrapper(gym.Env):
         self.beta = self.config["beta"]
         self.gamma = self.config["gamma"]
         
-        # 定义动作空间 (n_uav x 3 的连续值)
+        # 定义动作空间 (n_uav * 3 的一维连续值)
         self.action_space = spaces.Box(
-            low=np.array([self.config["min_action"]]*3*self.n_uav).reshape(self.n_uav,3),
-            high=np.array([self.config["max_action"]]*3*self.n_uav).reshape(self.n_uav,3),
+            low=np.array([self.config["min_action"]] * (3 * self.n_uav)),
+            high=np.array([self.config["max_action"]] * (3 * self.n_uav)),
             dtype=np.float32
         )
         
@@ -53,8 +53,8 @@ class UAVEnvWrapper(gym.Env):
         
         Returns:
             dict: 包含以下信息:
-                - uav_positions: 所有无人机的当前位置 (n_uav x 3)
-                - full_density: 完整的人群密度矩阵 (density_size x density_size) 
+                - uav_positions: 所有无人机的当前位置 (n_uav * 3)
+                - full_density: 完整的人群密度矩阵 (1 x density_size x density_size) 
                 - frame_id: 当前帧ID
                 - observed_ratio: 观测到的人群占总人群的比例
                 - observed_area_ratio: 无人机观测范围占整个场景的比例
@@ -87,10 +87,16 @@ class UAVEnvWrapper(gym.Env):
         total_area = self.density_size * self.density_size
         observed_area_ratio = observed_area / total_area
         
+        # 为完整密度矩阵添加通道维度
+        full_density = full_density.astype(np.float32)[np.newaxis, :, :]
+        
+        # 将无人机位置展平为一维数组
+        flat_uav_positions = self.uav_positions.flatten()
+        
         return {
             # 确保返回的是numpy数组类型
-            "uav_positions": np.array(self.uav_positions, dtype=np.float32),
-            "full_density": np.array(full_density, dtype=np.float32),
+            "uav_positions": np.array(flat_uav_positions, dtype=np.float32),
+            "full_density": full_density,
             "frame_id": frame_id,
             "observed_ratio": np.float32(observed_ratio),
             "observed_area_ratio": np.float32(observed_area_ratio)
@@ -117,9 +123,12 @@ class UAVEnvWrapper(gym.Env):
     def step(self, actions):
         self.current_step += 1
         
-        # 1. 更新无人机位置
+        # 1. 将一维动作重塑为(n_uav, 3)形状
+        actions_reshaped = actions.reshape(self.n_uav, 3)
+        
+        # 更新无人机位置
         self.uav_positions = np.clip(
-            self.uav_positions + actions,
+            self.uav_positions + actions_reshaped,
             self.boundary[0],
             self.boundary[1]
         )
@@ -172,7 +181,7 @@ class UAVEnvWrapper(gym.Env):
         # 计算帧ID
         frame_id = int(self.current_step * self.fps)
         
-        # 获取观测到的密度矩阵
+        # 获取观测到的密度矩阵和观测掩码
         observed_density, observation_mask = get_observed_density(
             frame_id, 
             self.uav_states, 
@@ -193,8 +202,8 @@ class UAVEnvWrapper(gym.Env):
         }
 
     def get_uav_positions(self):
-        # 返回无人机位置
-        return self.uav_positions.copy()
+        # 返回无人机位置（一维形式）
+        return self.uav_positions.flatten().copy()
 
     def render(self, mode='human'):
         # 可添加可视化逻辑

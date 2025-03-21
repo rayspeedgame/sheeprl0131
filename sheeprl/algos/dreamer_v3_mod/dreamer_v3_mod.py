@@ -98,7 +98,7 @@ def train(
     batch_obs = {k: data[k] / 255.0 - 0.5 for k in cfg.algo.cnn_keys.encoder} # 考虑删除归一化                                                                                                                                                                                                             
     batch_obs.update({k: data[k] for k in cfg.algo.mlp_keys.encoder})
     # 创建batch_full_obs，包含完整的人群分布数据
-    batch_full_obs = {"density_matrix": data["full_density"].unsqueeze(2)} if "full_density" in data else {}
+    batch_full_obs = {"density_matrix": data["full_density"]} if "full_density" in data else {}
 
     # 单独提取观测比例信息
     observed_ratio = data["observed_ratio"] if "observed_ratio" in data else None
