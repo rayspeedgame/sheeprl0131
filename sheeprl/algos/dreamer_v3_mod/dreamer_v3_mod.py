@@ -260,8 +260,14 @@ def train(
         imagined_actions[i] = actions
 
     # Predict values, rewards and continues
-    predicted_values = TwoHotEncodingDistribution(critic(imagined_trajectories, imagined_actions), dims=1).mean
-    predicted_rewards = TwoHotEncodingDistribution(world_model.reward_model(imagined_trajectories, imagined_actions), dims=1).mean
+    # 将状态和动作连接起来作为一个输入
+    combined_input = torch.cat([imagined_trajectories, imagined_actions], dim=-1)
+    predicted_values = TwoHotEncodingDistribution(critic(combined_input), dims=1).mean
+
+    # Compute the distribution over the rewards
+    reward_model_input = torch.cat([imagined_trajectories, imagined_actions], dim=-1)
+    predicted_rewards = TwoHotEncodingDistribution(world_model.reward_model(reward_model_input), dims=1).mean
+
     continues = Independent(BernoulliSafeMode(logits=world_model.continue_model(imagined_trajectories)), 1).mode
     true_continue = (1 - data["terminated"]).flatten().reshape(1, -1, 1)
     continues = torch.cat((true_continue, continues[1:]))
@@ -323,10 +329,9 @@ def train(
     actor_optimizer.step()
 
     # Predict the values
-    qv = TwoHotEncodingDistribution(critic(imagined_trajectories.detach()[:-1], imagined_actions.detach()[:-1]), dims=1)
-    predicted_target_values = TwoHotEncodingDistribution(
-        target_critic(imagined_trajectories.detach()[:-1], imagined_actions.detach()[:-1]), dims=1 # 还需增加action
-    ).mean
+    critic_input = torch.cat([imagined_trajectories.detach()[:-1], imagined_actions.detach()[:-1]], dim=-1)
+    qv = TwoHotEncodingDistribution(critic(critic_input), dims=1)
+    predicted_target_values = TwoHotEncodingDistribution(target_critic(critic_input), dims=1).mean
 
     # Critic optimization. Eq. 10 in the paper
     critic_optimizer.zero_grad(set_to_none=True)
