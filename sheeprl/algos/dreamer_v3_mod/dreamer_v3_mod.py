@@ -709,7 +709,9 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                 metrics_to_log = {
                     "observed_ratio": None,
                     "area_ratio": None,
-                    "reward": np.mean(rewards) if rewards.size > 0 else 0.0
+                    "reward": np.mean(rewards) if rewards.size > 0 else 0.0,
+                    "total_power": None,
+                    "served_people": None
                 }
                 
                 # 从infos中提取信息
@@ -724,6 +726,19 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                     if isinstance(area_ratios, list):
                         area_ratios = np.array(area_ratios)
                     metrics_to_log["area_ratio"] = np.mean(area_ratios)
+                
+                # 提取总功率和服务人数信息
+                if "total_power" in infos:
+                    total_power = infos["total_power"]
+                    if isinstance(total_power, list):
+                        total_power = np.array(total_power)
+                    metrics_to_log["total_power"] = np.mean(total_power)
+                
+                if "served_people" in infos:
+                    served_people = infos["served_people"]
+                    if isinstance(served_people, list):
+                        served_people = np.array(served_people)
+                    metrics_to_log["served_people"] = np.mean(served_people)
                 
                 # 构建日志消息
                 log_message = f"Rank-0: policy_step={policy_step}"
@@ -781,6 +796,10 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                     reset_data["observed_ratio"] = np.array(step_data["observed_ratio"][:, dones_idxes], dtype=np.float32)
                 if "observed_area_ratio" in step_data:
                     reset_data["observed_area_ratio"] = np.array(step_data["observed_area_ratio"][:, dones_idxes], dtype=np.float32)
+                if "total_power" in step_data:
+                    reset_data["total_power"] = np.array(step_data["total_power"][:, dones_idxes], dtype=np.float32)
+                if "served_people" in step_data:
+                    reset_data["served_people"] = np.array(step_data["served_people"][:, dones_idxes], dtype=np.float32)
                 
                 rb.add(reset_data, dones_idxes, validate_args=cfg.buffer.validate_args)
 

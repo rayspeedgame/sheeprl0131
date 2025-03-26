@@ -47,6 +47,19 @@ class UAVEnvWrapper(gym.Env):
         self.uav_positions = None
         # 创建包含id的无人机状态矩阵
         self.uav_states = None
+        
+        # 添加缓存变量，避免重复计算
+        self.frame_id = None
+        self.full_density = None
+        self.observed_density = None
+        self.observation_mask = None
+        self.observed_ratio = None
+        self.observed_area_ratio = None
+        self.total_people = None
+        self.observed_people = None
+        self.reward = None
+        self.total_power = None  # 添加总发射功率
+        self.served_people = None  # 添加服务人数
 
     def _get_info(self):
         """返回当前环境的额外信息
@@ -58,49 +71,58 @@ class UAVEnvWrapper(gym.Env):
                 - frame_id: 当前帧ID
                 - observed_ratio: 观测到的人群占总人群的比例
                 - observed_area_ratio: 无人机观测范围占整个场景的比例
+                - total_power: 无人机总发射功率
+                - served_people: 服务的人数
         """
-        # 计算当前帧ID
-        frame_id = int(self.current_step * self.fps)
+        # 将无人机位置展平为一维数组
+        flat_uav_positions = self.uav_positions.flatten()
+        
+        # 将完整密度矩阵添加通道维度（如果尚未添加）
+        if self.full_density.ndim == 2:
+            full_density_with_channel = self.full_density.astype(np.float32)[np.newaxis, :, :]
+        else:
+            full_density_with_channel = self.full_density
+        
+        return {
+            # 确保返回的是numpy数组类型
+            "uav_positions": np.array(flat_uav_positions, dtype=np.float32),
+            "full_density": full_density_with_channel,
+            "frame_id": self.frame_id,
+            "observed_ratio": np.float32(self.observed_ratio),
+            "observed_area_ratio": np.float32(self.observed_area_ratio),
+            "total_power": np.float32(self.total_power if self.total_power is not None else 0.0),
+            "served_people": np.float32(self.served_people if self.served_people is not None else 0.0)
+        }
+
+    def _update_state(self):
+        """更新环境状态和相关计算值"""
+        # 计算帧ID
+        self.frame_id = int(self.current_step * self.fps)
         
         # 获取完整的密度分布
-        full_density = get_crowd_density(
+        self.full_density = get_crowd_density(
             self.density_size,
             self.density_size,
-            frame_id
+            self.frame_id
         )
         
         # 获取观测到的密度矩阵和观测掩码
-        observed_density, observation_mask = get_observed_density(
-            frame_id, 
+        self.observed_density, self.observation_mask = get_observed_density(
+            self.frame_id, 
             self.uav_states, 
             self.density_size, 
             self.density_size
         )
         
-        # 计算观测到的人群比例
-        total_people = np.sum(full_density)
-        observed_people = np.sum(observed_density)
-        observed_ratio = observed_people / total_people if total_people > 0 else 0
+        # 计算各种统计数据
+        self.total_people = np.sum(self.full_density)
+        self.observed_people = np.sum(self.observed_density)
+        self.observed_ratio = self.observed_people / self.total_people if self.total_people > 0 else 0
         
-        # 计算观测区域比例 (使用观测掩码)
-        observed_area = np.count_nonzero(observation_mask)
+        # 计算观测区域比例
+        observed_area = np.count_nonzero(self.observation_mask)
         total_area = self.density_size * self.density_size
-        observed_area_ratio = observed_area / total_area
-        
-        # 为完整密度矩阵添加通道维度
-        full_density = full_density.astype(np.float32)[np.newaxis, :, :]
-        
-        # 将无人机位置展平为一维数组
-        flat_uav_positions = self.uav_positions.flatten()
-        
-        return {
-            # 确保返回的是numpy数组类型
-            "uav_positions": np.array(flat_uav_positions, dtype=np.float32),
-            "full_density": full_density,
-            "frame_id": frame_id,
-            "observed_ratio": np.float32(observed_ratio),
-            "observed_area_ratio": np.float32(observed_area_ratio)
-        }
+        self.observed_area_ratio = observed_area / total_area
 
     def reset(self, seed=None, options=None):
         # 重置环境时间
@@ -117,6 +139,15 @@ class UAVEnvWrapper(gym.Env):
         self.uav_states = np.zeros((self.n_uav, 4))
         self.uav_states[:, 0] = np.arange(self.n_uav)  # 设置id
         self.uav_states[:, 1:4] = self.uav_positions   # 设置位置
+        
+        # 更新环境状态和缓存值
+        self._update_state()
+        
+        # 初始化能量和服务人数
+        self.total_power, self.served_people = allocate_uav_service(
+            self.frame_id, 
+            self.uav_states
+        )
         
         return self._get_obs(), self._get_info()
 
@@ -136,69 +167,36 @@ class UAVEnvWrapper(gym.Env):
         # 更新无人机状态矩阵
         self.uav_states[:, 1:4] = self.uav_positions
         
-        # 2. 计算帧ID
-        frame_id = int(self.current_step * self.fps)
+        # 更新环境状态和缓存的计算值
+        self._update_state()
         
-        # 3. 计算奖励 - 直接使用更新后的无人机位置
-        total_power, served_people = allocate_uav_service(
-            frame_id, 
+        # 计算服务人数和能量消耗
+        self.total_power, self.served_people = allocate_uav_service(
+            self.frame_id, 
             self.uav_states
         )
-        
-        # 获取完整的密度分布
-        full_density = get_crowd_density(
-            self.density_size, 
-            self.density_size, 
-            frame_id
-        )
-        total_people = np.sum(full_density)
-        
-        # 计算观测覆盖区域中的人数比例
-        observed_density, _ = get_observed_density(
-            frame_id, 
-            self.uav_states, 
-            self.density_size, 
-            self.density_size
-        )
-        observed_people = np.sum(observed_density)
-        observed_ratio = observed_people / total_people if total_people > 0 else 0
         
         # 奖励计算
         decay_factor = np.exp(-0.01 * self.current_step)  # 指数衰减因子
         epsilon = 1e-6  # 防止除零
         
-        reward = (self.alpha * observed_ratio * decay_factor) + \
-                 (self.beta * served_people) - \
-                 (self.gamma * (total_power / (served_people**2 + epsilon)))
+        self.reward = (self.alpha * self.observed_ratio * decay_factor) + \
+                 (self.beta * self.served_people) - \
+                 (self.gamma * (self.total_power / (self.served_people**2 + epsilon)))
         
-        # 4. 检查终止条件
+        # 检查终止条件
         terminated = self.current_step >= self.max_steps
         truncated = False  # 可根据需要添加其他终止条件
         
-        return self._get_obs(), reward, terminated, truncated, self._get_info()
+        return self._get_obs(), self.reward, terminated, truncated, self._get_info()
 
     def _get_obs(self):
-        # 计算帧ID
-        frame_id = int(self.current_step * self.fps)
-        
-        # 获取观测到的密度矩阵和观测掩码
-        observed_density, observation_mask = get_observed_density(
-            frame_id, 
-            self.uav_states, 
-            self.density_size, 
-            self.density_size
-        )
-        
         # 将密度矩阵增加一个通道维度 [height, width] -> [1, height, width]
-        observed_density = observed_density.astype(np.float32)[np.newaxis, :, :]
-        
-        # 可选：也可以将观测掩码作为第二个通道
-        # observation_mask = observation_mask.astype(np.float32)[np.newaxis, :, :]
-        # combined_obs = np.concatenate([observed_density, observation_mask], axis=0)
+        observed_density_with_channel = self.observed_density.astype(np.float32)[np.newaxis, :, :]
         
         # 仅返回人群密度信息（带通道维度）
         return {
-            "density_matrix": observed_density
+            "density_matrix": observed_density_with_channel
         }
 
     def get_uav_positions(self):
