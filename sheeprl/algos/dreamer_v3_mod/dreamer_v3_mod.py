@@ -702,6 +702,42 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                             aggregator.update("Rewards/rew_avg", ep_rew)
                             aggregator.update("Game/ep_len_avg", ep_len)
                         fabric.print(f"Rank-0: policy_step={policy_step}, reward_env_{i}={ep_rew[-1]}")
+            
+            # 添加每200步的日志输出（优化版本）
+            if cfg.metric.log_level > 0 and policy_step % 200 == 0:
+                # 准备记录的指标
+                metrics_to_log = {
+                    "observed_ratio": None,
+                    "area_ratio": None,
+                    "reward": np.mean(rewards) if rewards.size > 0 else 0.0
+                }
+                
+                # 从infos中提取信息
+                if "observed_ratio" in infos:
+                    ratios = infos["observed_ratio"]
+                    if isinstance(ratios, list):
+                        ratios = np.array(ratios)
+                    metrics_to_log["observed_ratio"] = np.mean(ratios)
+                
+                if "observed_area_ratio" in infos:
+                    area_ratios = infos["observed_area_ratio"]
+                    if isinstance(area_ratios, list):
+                        area_ratios = np.array(area_ratios)
+                    metrics_to_log["area_ratio"] = np.mean(area_ratios)
+                
+                # 构建日志消息
+                log_message = f"Rank-0: policy_step={policy_step}"
+                
+                for metric_name, metric_value in metrics_to_log.items():
+                    if metric_value is not None:
+                        log_message += f", {metric_name}={metric_value:.4f}"
+                        
+                        # 更新聚合器
+                        if aggregator and not aggregator.disabled:
+                            aggregator.update(f"Metrics/{metric_name}", metric_value)
+                
+                # 输出日志
+                fabric.print(log_message)
 
             # Save the real next observation
             real_next_obs = copy.deepcopy(next_obs) 
