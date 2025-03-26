@@ -704,12 +704,13 @@ class PlayerDV3(nn.Module):
         """
         embedded_obs = self.encoder(obs)
         self.recurrent_state = self.rssm.recurrent_model(
-            torch.cat((self.stochastic_state, self.actions), -1), self.recurrent_state
+            # torch.cat((self.stochastic_state, self.actions), -1), self.recurrent_state
+            self.stochastic_state, self.recurrent_state # 删除action输入
         )
         if self.decoupled_rssm:
             _, self.stochastic_state = self.rssm._representation(embedded_obs)
         else:
-            _, self.stochastic_state = self.rssm._representation(self.recurrent_state, embedded_obs)
+            _, self.stochastic_state = self.rssm._representation(self.recurrent_state, embedded_obs, self.actions)
         self.stochastic_state = self.stochastic_state.view(
             *self.stochastic_state.shape[:-2], self.stochastic_size * self.discrete_size
         )

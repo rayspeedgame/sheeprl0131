@@ -174,7 +174,7 @@ def train(
 
     # Compute the distribution over the rewards
     #
-    reward_model_combined_input = torch.cat([latent_states, batch_positions], dim=-1)
+    reward_model_combined_input = torch.cat([latent_states, batch_positions], dim=-1).detach()
     # pr = TwoHotEncodingDistribution(world_model.reward_model(latent_states,batch_actions), dims=1) # 需要加入action或者position
     pr = TwoHotEncodingDistribution(world_model.reward_model(reward_model_combined_input), dims=1) # 需要加入action或者position
 
@@ -254,14 +254,14 @@ def train(
     for i in range(1, cfg.algo.horizon + 1):
         imagined_prior, recurrent_state = world_model.rssm.imagination(imagined_prior, recurrent_state) # 去除action输入
         imagined_prior = imagined_prior.view(1, -1, stoch_state_size)
-        imagined_latent_state = torch.cat((imagined_prior, recurrent_state), -1)
+        imagined_latent_state = torch.cat((imagined_prior, recurrent_state), -1).detach()
         imagined_trajectories[i] = imagined_latent_state
         actions = torch.cat(actor(imagined_latent_state.detach())[0], dim=-1)
         imagined_actions[i] = actions
 
     # Predict values, rewards and continues
     # 将状态和动作连接起来作为一个输入
-    combined_input = torch.cat([imagined_trajectories, imagined_actions], dim=-1)
+    combined_input = torch.cat([imagined_trajectories, imagined_actions], dim=-1).detach()
     predicted_values = TwoHotEncodingDistribution(critic(combined_input), dims=1).mean
 
     # Compute the distribution over the rewards
