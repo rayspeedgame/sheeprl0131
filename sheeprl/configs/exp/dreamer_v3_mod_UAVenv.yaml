@@ -33,7 +33,7 @@ algo:
   mlp_keys:
     encoder: []
     decoder: ${algo.mlp_keys.encoder}
-  learning_starts: 64
+  learning_starts: 128
   
 
 # Metric
