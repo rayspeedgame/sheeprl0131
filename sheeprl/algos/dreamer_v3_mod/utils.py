@@ -39,15 +39,21 @@ AGGREGATOR_KEYS = {
     "Metrics/reward",
     "Metrics/total_power",
     "Metrics/served_people",
-    # 测试过程中的环境指标
+    # 测试过程中的环境指标（汇总值）
     "Test/cumulative_reward",
     "Test/episode_length",
     "Test/observed_ratio_mean",
     "Test/observed_area_ratio_mean",
-    "Test/rewards_mean",
-    "Test/rewards_std",
+    "Test/reward_mean",
+    "Test/reward_std",
     "Test/total_power_mean",
-    "Test/served_people_mean"
+    "Test/served_people_mean",
+    # 测试过程中的环境指标（按步骤记录）
+    "Test_Steps/reward",
+    "Test_Steps/observed_ratio",
+    "Test_Steps/observed_area_ratio",
+    "Test_Steps/total_power",
+    "Test_Steps/served_people"
 }
 MODELS_TO_REGISTER = {"world_model", "actor", "critic", "target_critic", "moments"}
 
@@ -136,23 +142,21 @@ def test(
     
     # 初始化新增的监控指标
     episode_length = 0
-    metrics_data = {
-        "observed_ratio": [],
-        "observed_area_ratio": [],
-        "rewards": [],
-        "total_power": [],
-        "served_people": []
-    }
+    step_metrics = []  # 存储每步的指标
     
     # 记录初始info中的数据
+    step_data = {"step": 0}
     if "observed_ratio" in info and info["observed_ratio"] is not None:
-        metrics_data["observed_ratio"].append(info["observed_ratio"])
+        step_data["observed_ratio"] = info["observed_ratio"]
     if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
-        metrics_data["observed_area_ratio"].append(info["observed_area_ratio"])
+        step_data["observed_area_ratio"] = info["observed_area_ratio"]
     if "total_power" in info and info["total_power"] is not None:
-        metrics_data["total_power"].append(info["total_power"])
+        step_data["total_power"] = info["total_power"]
     if "served_people" in info and info["served_people"] is not None:
-        metrics_data["served_people"].append(info["served_people"])
+        step_data["served_people"] = info["served_people"]
+    
+    # 添加初始步骤的指标
+    step_metrics.append(step_data)
     
     while not done:
         # Act greedly through the environment
@@ -169,18 +173,21 @@ def test(
         obs, reward, done, truncated, info = env.step(real_actions.reshape(env.action_space.shape))
         done = done or truncated or cfg.dry_run
         cumulative_rew += reward
-        metrics_data["rewards"].append(reward)
         episode_length += 1
         
         # 记录每步的环境信息
+        step_data = {"step": episode_length, "reward": reward}
         if "observed_ratio" in info and info["observed_ratio"] is not None:
-            metrics_data["observed_ratio"].append(info["observed_ratio"])
+            step_data["observed_ratio"] = info["observed_ratio"]
         if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
-            metrics_data["observed_area_ratio"].append(info["observed_area_ratio"])
+            step_data["observed_area_ratio"] = info["observed_area_ratio"]
         if "total_power" in info and info["total_power"] is not None:
-            metrics_data["total_power"].append(info["total_power"])
+            step_data["total_power"] = info["total_power"]
         if "served_people" in info and info["served_people"] is not None:
-            metrics_data["served_people"].append(info["served_people"])
+            step_data["served_people"] = info["served_people"]
+        
+        # 添加当前步骤的指标
+        step_metrics.append(step_data)
     
     fabric.print("Test - Reward:", cumulative_rew)
     fabric.print("Test - Episode Length:", episode_length)
@@ -189,21 +196,29 @@ def test(
         # 记录基本评估指标
         metrics_dict = {"Test/cumulative_reward": cumulative_rew, "Test/episode_length": episode_length}
         
-        # 添加平均环境指标
-        for metric_name, values in metrics_data.items():
-            if values:  # 确保列表不为空
-                mean_value = np.mean(values)
-                metrics_dict[f"Test/{metric_name}_mean"] = mean_value
-                
-                # 只对奖励计算标准差，其他指标可选
-                if metric_name == "rewards" and len(values) > 1:
-                    metrics_dict[f"Test/{metric_name}_std"] = np.std(values)
-                
-                # 输出关键指标
-                fabric.print(f"Test - {metric_name}_mean: {mean_value:.4f}")
+        # 计算整体平均值作为汇总指标
+        metrics_avg = {}
+        for key in ["observed_ratio", "observed_area_ratio", "reward", "total_power", "served_people"]:
+            values = [step[key] for step in step_metrics if key in step]
+            if values:
+                metrics_avg[f"Test/{key}_mean"] = np.mean(values)
+                if key == "reward" and len(values) > 1:
+                    metrics_avg[f"Test/{key}_std"] = np.std(values)
         
-        # 记录所有指标
+        # 记录汇总指标
+        metrics_dict.update(metrics_avg)
         fabric.logger.log_metrics(metrics_dict, 0)
+        
+        # 记录每步的指标，这样在TensorBoard中可以看到随时间变化的曲线
+        for step_idx, step_data in enumerate(step_metrics):
+            step_metrics_dict = {}
+            for key, value in step_data.items():
+                if key != "step":  # 排除step本身
+                    step_metrics_dict[f"Test_Steps/{key}"] = value
+            
+            if step_metrics_dict:
+                # 使用step_idx作为x轴
+                fabric.logger.log_metrics(step_metrics_dict, step_idx)
     
     env.close()
 
