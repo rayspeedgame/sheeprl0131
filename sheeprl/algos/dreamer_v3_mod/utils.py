@@ -33,6 +33,21 @@ AGGREGATOR_KEYS = {
     "Grads/world_model",
     "Grads/actor",
     "Grads/critic",
+    # 训练过程中的环境指标
+    "Metrics/observed_ratio",
+    "Metrics/area_ratio",
+    "Metrics/reward",
+    "Metrics/total_power",
+    "Metrics/served_people",
+    # 测试过程中的环境指标
+    "Test/cumulative_reward",
+    "Test/episode_length",
+    "Test/observed_ratio_mean",
+    "Test/observed_area_ratio_mean",
+    "Test/rewards_mean",
+    "Test/rewards_std",
+    "Test/total_power_mean",
+    "Test/served_people_mean"
 }
 MODELS_TO_REGISTER = {"world_model", "actor", "critic", "target_critic", "moments"}
 
@@ -115,9 +130,30 @@ def test(
     env: gym.Env = make_env(cfg, cfg.seed, 0, log_dir, "test" + (f"_{test_name}" if test_name != "" else ""))()
     done = False
     cumulative_rew = 0
-    obs = env.reset(seed=cfg.seed)[0]
+    obs, info = env.reset(seed=cfg.seed)
     player.num_envs = 1
     player.init_states()
+    
+    # 初始化新增的监控指标
+    episode_length = 0
+    metrics_data = {
+        "observed_ratio": [],
+        "observed_area_ratio": [],
+        "rewards": [],
+        "total_power": [],
+        "served_people": []
+    }
+    
+    # 记录初始info中的数据
+    if "observed_ratio" in info and info["observed_ratio"] is not None:
+        metrics_data["observed_ratio"].append(info["observed_ratio"])
+    if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
+        metrics_data["observed_area_ratio"].append(info["observed_area_ratio"])
+    if "total_power" in info and info["total_power"] is not None:
+        metrics_data["total_power"].append(info["total_power"])
+    if "served_people" in info and info["served_people"] is not None:
+        metrics_data["served_people"].append(info["served_people"])
+    
     while not done:
         # Act greedly through the environment
         torch_obs = prepare_obs(fabric, obs, cnn_keys=cfg.algo.cnn_keys.encoder)
@@ -130,12 +166,45 @@ def test(
             real_actions = torch.stack([real_act.argmax(dim=-1) for real_act in real_actions], dim=-1).cpu().numpy()
 
         # Single environment step
-        obs, reward, done, truncated, _ = env.step(real_actions.reshape(env.action_space.shape))
+        obs, reward, done, truncated, info = env.step(real_actions.reshape(env.action_space.shape))
         done = done or truncated or cfg.dry_run
         cumulative_rew += reward
+        metrics_data["rewards"].append(reward)
+        episode_length += 1
+        
+        # 记录每步的环境信息
+        if "observed_ratio" in info and info["observed_ratio"] is not None:
+            metrics_data["observed_ratio"].append(info["observed_ratio"])
+        if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
+            metrics_data["observed_area_ratio"].append(info["observed_area_ratio"])
+        if "total_power" in info and info["total_power"] is not None:
+            metrics_data["total_power"].append(info["total_power"])
+        if "served_people" in info and info["served_people"] is not None:
+            metrics_data["served_people"].append(info["served_people"])
+    
     fabric.print("Test - Reward:", cumulative_rew)
+    fabric.print("Test - Episode Length:", episode_length)
+    
     if cfg.metric.log_level > 0 and len(fabric.loggers) > 0:
-        fabric.logger.log_metrics({"Test/cumulative_reward": cumulative_rew}, 0)
+        # 记录基本评估指标
+        metrics_dict = {"Test/cumulative_reward": cumulative_rew, "Test/episode_length": episode_length}
+        
+        # 添加平均环境指标
+        for metric_name, values in metrics_data.items():
+            if values:  # 确保列表不为空
+                mean_value = np.mean(values)
+                metrics_dict[f"Test/{metric_name}_mean"] = mean_value
+                
+                # 只对奖励计算标准差，其他指标可选
+                if metric_name == "rewards" and len(values) > 1:
+                    metrics_dict[f"Test/{metric_name}_std"] = np.std(values)
+                
+                # 输出关键指标
+                fabric.print(f"Test - {metric_name}_mean: {mean_value:.4f}")
+        
+        # 记录所有指标
+        fabric.logger.log_metrics(metrics_dict, 0)
+    
     env.close()
 
 
