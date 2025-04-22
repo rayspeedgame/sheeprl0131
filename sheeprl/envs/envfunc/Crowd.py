@@ -69,7 +69,7 @@ def get_positions(frame_id):
         numpy.ndarray: 位置信息矩阵，每行包含 [visitor_id, x, y]
     """
     # 连接数据库
-    conn = sqlite3.connect('exhibition.sqlite')
+    conn = sqlite3.connect('exhibition2.sqlite')
     cursor = conn.cursor()
     
     # 获取指定帧的所有游客位置

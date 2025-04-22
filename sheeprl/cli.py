@@ -18,6 +18,10 @@ from sheeprl.utils.metric import MetricAggregator
 from sheeprl.utils.registry import algorithm_registry, evaluation_registry
 from sheeprl.utils.timer import timer
 from sheeprl.utils.utils import dotdict, print_config
+from sheeprl.data.buffers import EnvIndependentReplayBuffer
+from sheeprl.data.buffers import SequentialReplayBuffer
+from pathlib import PosixPath
+from sheeprl.utils.memmap import MemmapArray
 
 
 def resume_from_checkpoint(cfg: DictConfig) -> DictConfig:
@@ -222,6 +226,14 @@ def eval_algorithm(cfg: DictConfig):
 
     # Seed everything
     fabric.seed_everything(cfg.seed)
+
+    torch.serialization.add_safe_globals([EnvIndependentReplayBuffer])
+    torch.serialization.add_safe_globals([SequentialReplayBuffer])
+    torch.serialization.add_safe_globals([PosixPath])
+    torch.serialization.add_safe_globals([MemmapArray])
+    # torch.serialization.add_safe_globals([PosixPath])
+    # torch.serialization.add_safe_globals([PosixPath])
+    # torch.serialization.add_safe_globals([PosixPath])
 
     # Load the checkpoint
     state = fabric.load(cfg.checkpoint_path)

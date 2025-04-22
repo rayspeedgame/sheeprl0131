@@ -3,7 +3,7 @@ from sheeprl.envs.envfunc.Crowd import get_positions, get_crowd_density
 from sheeprl.envs.envfunc.Communication import calculate_required_power
 import sqlite3
 
-def allocate_uav_service(frame_id, uav_states, max_power=10.0):
+def allocate_uav_service(frame_id, uav_states, max_power=1.0):
     """
     分配无人机服务并计算总功率消耗
     
@@ -16,11 +16,11 @@ def allocate_uav_service(frame_id, uav_states, max_power=10.0):
         tuple: (总功率消耗, 服务成功的用户数)
     """
     # 通信参数设置
-    FREQUENCY = 2.4  # GHz
-    BANDWIDTH = 20   # MHz
-    DATA_RATE = 100000 # kbps
+    FREQUENCY = 3.5  # GHz
+    BANDWIDTH = 3.6   # MHz
+    DATA_RATE = 10000 # kbps
     NOISE_POWER = -50 # dBm
-    TX_GAIN = 2      # dB
+    TX_GAIN = 21      # dB
     RX_GAIN = 2      # dB
     
     # 1. 获取游客位置信息

@@ -15,7 +15,7 @@ from sheeprl.utils.utils import unwrap_fabric
 if TYPE_CHECKING:
     from mlflow.models.model import ModelInfo
 
-    from sheeprl.algos.dreamer_v3.agent import PlayerDV3
+    from sheeprl.algos.dreamer_v3_mod.agent import PlayerDV3
 
 AGGREGATOR_KEYS = {
     "Rewards/rew_avg",

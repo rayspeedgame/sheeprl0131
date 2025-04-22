@@ -175,3 +175,4 @@ session_*
 bin/
 .idea
 .idea
+.exhibition*
