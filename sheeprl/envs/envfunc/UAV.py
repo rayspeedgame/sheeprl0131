@@ -3,7 +3,7 @@ from sheeprl.envs.envfunc.Crowd import get_positions, get_crowd_density
 from sheeprl.envs.envfunc.Communication import calculate_required_power
 import sqlite3
 
-def allocate_uav_service(frame_id, uav_states, max_power=1.0):
+def allocate_uav_service(frame_id, uav_states, max_power=1.0, db_path='exhibition.sqlite'):
     """
     分配无人机服务并计算总功率消耗
     
@@ -11,6 +11,7 @@ def allocate_uav_service(frame_id, uav_states, max_power=1.0):
         frame_id (int): 帧编号
         uav_states (numpy.ndarray): 无人机状态矩阵 [uav_id, x, y, z]
         max_power (float): 无人机最大发射功率，单位：瓦特
+        db_path (str): 数据库路径
         
     返回:
         tuple: (总功率消耗, 服务成功的用户数)
@@ -24,7 +25,7 @@ def allocate_uav_service(frame_id, uav_states, max_power=1.0):
     RX_GAIN = 2      # dB
     
     # 1. 获取游客位置信息
-    visitor_positions = get_positions(frame_id)
+    visitor_positions = get_positions(frame_id, db_path=db_path)
     visitor_status = np.zeros((len(visitor_positions), 4))  # [visitor_id, x, y, served_flag]
     visitor_status[:, 0] = visitor_positions[:, 0]  # ID
     visitor_status[:, 1:3] = visitor_positions[:, 1:3]  # x, y coordinates
@@ -93,7 +94,7 @@ def allocate_uav_service(frame_id, uav_states, max_power=1.0):
             
     return total_power, served_users
 
-def get_observed_density(frame_id, uav_positions, grid_rows=10, grid_cols=10, flare_angle=60):
+def get_observed_density(frame_id, uav_positions, grid_rows=10, grid_cols=10, flare_angle=60, db_path='exhibition.sqlite'):
     """
     计算无人机观测到的人群密度信息
     
@@ -103,6 +104,7 @@ def get_observed_density(frame_id, uav_positions, grid_rows=10, grid_cols=10, fl
         grid_rows (int): 网格行数
         grid_cols (int): 网格列数
         flare_angle (float): 无人机观测角度（度），默认60度
+        db_path (str): 数据库路径
         
     返回:
         tuple: (observed_density, observation_mask)
@@ -112,13 +114,13 @@ def get_observed_density(frame_id, uav_positions, grid_rows=10, grid_cols=10, fl
 
     
     # 获取人群密度信息
-    density_matrix = get_crowd_density(grid_cols, grid_rows, frame_id)
+    density_matrix = get_crowd_density(grid_cols, grid_rows, frame_id, db_path=db_path)
     
     # 创建观测掩码矩阵（标记哪些网格可以被观测到）
     observation_mask = np.zeros((grid_rows, grid_cols), dtype=bool)
     
     # 获取场地范围（从metadata表）
-    conn = sqlite3.connect('exhibition.sqlite')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM metadata WHERE key = 'xmin'")
     min_x = float(cursor.fetchone()[0])

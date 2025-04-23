@@ -3,15 +3,18 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from sheeprl.envs.envfunc.UAV import get_observed_density, allocate_uav_service
-from sheeprl.envs.envfunc.Crowd import get_crowd_density
+from sheeprl.envs.envfunc.Crowd import get_crowd_density, get_positions
 
 class UAVEnvWrapper(gym.Env):
-    def __init__(self, config_path="config.json"):
+    def __init__(self, config_path="config.json", db_path="exhibition2.sqlite"):
         super(UAVEnvWrapper, self).__init__()
         
         # 从配置文件加载参数
         with open(config_path) as f:
             self.config = json.load(f)
+        
+        # 数据库路径
+        self.db_path = db_path
         
         # 环境参数
         self.n_uav = self.config["n_uav"]
@@ -106,7 +109,8 @@ class UAVEnvWrapper(gym.Env):
         self.full_density = get_crowd_density(
             self.density_size,
             self.density_size,
-            self.frame_id
+            self.frame_id,
+            db_path=self.db_path
         )
         
         # 获取观测到的密度矩阵和观测掩码
@@ -114,7 +118,8 @@ class UAVEnvWrapper(gym.Env):
             self.frame_id, 
             self.uav_states, 
             self.density_size, 
-            self.density_size
+            self.density_size,
+            db_path=self.db_path
         )
         
         # 计算各种统计数据
@@ -149,7 +154,8 @@ class UAVEnvWrapper(gym.Env):
         # 初始化能量和服务人数
         self.total_power, self.served_people = allocate_uav_service(
             self.frame_id, 
-            self.uav_states
+            self.uav_states,
+            db_path=self.db_path
         )
         
         # 计算服务用户比例
@@ -179,7 +185,8 @@ class UAVEnvWrapper(gym.Env):
         # 计算服务人数和能量消耗
         self.total_power, self.served_people = allocate_uav_service(
             self.frame_id, 
-            self.uav_states
+            self.uav_states,
+            db_path=self.db_path
         )
         
         # 计算服务用户比例

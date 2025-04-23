@@ -1,7 +1,7 @@
 import sqlite3
 import numpy as np
 
-def get_crowd_density(grid_cols, grid_rows, frame_id):
+def get_crowd_density(grid_cols, grid_rows, frame_id, db_path='exhibition.sqlite'):
     """
     计算指定帧下各网格的人群密度
     
@@ -9,12 +9,13 @@ def get_crowd_density(grid_cols, grid_rows, frame_id):
         grid_cols (int): 网格列数
         grid_rows (int): 网格行数
         frame_id (int): 帧编号
+        db_path (str): 数据库路径
     
     返回:
         numpy.ndarray: 人群密度矩阵 (grid_rows x grid_cols)，原点在左上角，y轴向上
     """
     # 连接数据库
-    conn = sqlite3.connect('exhibition.sqlite')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 从metadata表获取坐标范围，使用key-value格式查询
@@ -58,18 +59,19 @@ def get_crowd_density(grid_cols, grid_rows, frame_id):
     
     return density_matrix
 
-def get_positions(frame_id):
+def get_positions(frame_id, db_path='exhibition.sqlite'):
     """
     获取指定帧中所有游客的精确位置信息
     
     参数:
         frame_id (int): 帧编号
+        db_path (str): 数据库路径
     
     返回:
         numpy.ndarray: 位置信息矩阵，每行包含 [visitor_id, x, y]
     """
     # 连接数据库
-    conn = sqlite3.connect('exhibition2.sqlite')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 获取指定帧的所有游客位置
