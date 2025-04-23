@@ -596,6 +596,12 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
         if area_ratio.ndim == 0:
             area_ratio = area_ratio[np.newaxis]
         step_data["observed_area_ratio"] = area_ratio[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
+    if "service_ratio" in info:
+        # 处理service_ratio
+        service_ratio = np.array(info["service_ratio"])
+        if service_ratio.ndim == 0:
+            service_ratio = service_ratio[np.newaxis]
+        step_data["service_ratio"] = service_ratio[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
     
     player.init_states()
 
@@ -676,6 +682,13 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                     if area_ratio.ndim == 0:
                         area_ratio = area_ratio[np.newaxis]
                     step_data["observed_area_ratio"] = area_ratio[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
+                    
+                if "service_ratio" in infos:
+                    # 处理service_ratio
+                    service_ratio = np.array(infos["service_ratio"])
+                    if service_ratio.ndim == 0:
+                        service_ratio = service_ratio[np.newaxis]
+                    step_data["service_ratio"] = service_ratio[np.newaxis, :, np.newaxis]  # 形状为 (1, num_envs, 1)
 
             step_data["is_first"] = np.zeros_like(step_data["terminated"])
             if "restart_on_exception" in infos:
@@ -711,7 +724,8 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                     "area_ratio": None,
                     "reward": np.mean(rewards) if rewards.size > 0 else 0.0,
                     "total_power": None,
-                    "served_people": None
+                    "served_people": None,
+                    "service_ratio": None
                 }
                 
                 # 从infos中提取信息
@@ -739,6 +753,12 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                     if isinstance(served_people, list):
                         served_people = np.array(served_people)
                     metrics_to_log["served_people"] = np.mean(served_people)
+                    
+                if "service_ratio" in infos:
+                    service_ratio = infos["service_ratio"]
+                    if isinstance(service_ratio, list):
+                        service_ratio = np.array(service_ratio)
+                    metrics_to_log["service_ratio"] = np.mean(service_ratio)
                 
                 # 构建日志消息
                 log_message = f"Rank-0: policy_step={policy_step}"
@@ -796,6 +816,8 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                     reset_data["observed_ratio"] = np.array(step_data["observed_ratio"][:, dones_idxes], dtype=np.float32)
                 if "observed_area_ratio" in step_data:
                     reset_data["observed_area_ratio"] = np.array(step_data["observed_area_ratio"][:, dones_idxes], dtype=np.float32)
+                if "service_ratio" in step_data:
+                    reset_data["service_ratio"] = np.array(step_data["service_ratio"][:, dones_idxes], dtype=np.float32)
                 if "total_power" in step_data:
                     reset_data["total_power"] = np.array(step_data["total_power"][:, dones_idxes], dtype=np.float32)
                 if "served_people" in step_data:

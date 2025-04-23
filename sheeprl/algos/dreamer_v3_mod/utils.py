@@ -39,11 +39,13 @@ AGGREGATOR_KEYS = {
     "Metrics/reward",
     "Metrics/total_power",
     "Metrics/served_people",
+    "Metrics/service_ratio",
     # 测试过程中的环境指标（汇总值）
     "Test/cumulative_reward",
     "Test/episode_length",
     "Test/observed_ratio_mean",
     "Test/observed_area_ratio_mean",
+    "Test/service_ratio_mean",
     "Test/reward_mean",
     "Test/reward_std",
     "Test/total_power_mean",
@@ -52,6 +54,7 @@ AGGREGATOR_KEYS = {
     "Test_Steps/reward",
     "Test_Steps/observed_ratio",
     "Test_Steps/observed_area_ratio",
+    "Test_Steps/service_ratio",
     "Test_Steps/total_power",
     "Test_Steps/served_people"
 }
@@ -150,6 +153,8 @@ def test(
         step_data["observed_ratio"] = info["observed_ratio"]
     if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
         step_data["observed_area_ratio"] = info["observed_area_ratio"]
+    if "service_ratio" in info and info["service_ratio"] is not None:
+        step_data["service_ratio"] = info["service_ratio"]
     if "total_power" in info and info["total_power"] is not None:
         step_data["total_power"] = info["total_power"]
     if "served_people" in info and info["served_people"] is not None:
@@ -181,6 +186,8 @@ def test(
             step_data["observed_ratio"] = info["observed_ratio"]
         if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
             step_data["observed_area_ratio"] = info["observed_area_ratio"]
+        if "service_ratio" in info and info["service_ratio"] is not None:
+            step_data["service_ratio"] = info["service_ratio"]
         if "total_power" in info and info["total_power"] is not None:
             step_data["total_power"] = info["total_power"]
         if "served_people" in info and info["served_people"] is not None:
@@ -198,7 +205,7 @@ def test(
         
         # 计算整体平均值作为汇总指标
         metrics_avg = {}
-        for key in ["observed_ratio", "observed_area_ratio", "reward", "total_power", "served_people"]:
+        for key in ["observed_ratio", "observed_area_ratio", "service_ratio", "reward", "total_power", "served_people"]:
             values = [step[key] for step in step_metrics if key in step]
             if values:
                 metrics_avg[f"Test/{key}_mean"] = np.mean(values)

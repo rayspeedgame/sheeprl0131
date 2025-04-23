@@ -60,6 +60,7 @@ class UAVEnvWrapper(gym.Env):
         self.reward = None
         self.total_power = None  # 添加总发射功率
         self.served_people = None  # 添加服务人数
+        self.service_ratio = None  # 添加服务比例
 
     def _get_info(self):
         """返回当前环境的额外信息
@@ -73,6 +74,7 @@ class UAVEnvWrapper(gym.Env):
                 - observed_area_ratio: 无人机观测范围占整个场景的比例
                 - total_power: 无人机总发射功率
                 - served_people: 服务的人数
+                - service_ratio: 服务人群占总人群的比例
         """
         # 将无人机位置展平为一维数组
         flat_uav_positions = self.uav_positions.flatten()
@@ -91,7 +93,8 @@ class UAVEnvWrapper(gym.Env):
             "observed_ratio": np.float32(self.observed_ratio),
             "observed_area_ratio": np.float32(self.observed_area_ratio),
             "total_power": np.float32(self.total_power if self.total_power is not None else 0.0),
-            "served_people": np.float32(self.served_people if self.served_people is not None else 0.0)
+            "served_people": np.float32(self.served_people if self.served_people is not None else 0.0),
+            "service_ratio": np.float32(self.service_ratio if self.service_ratio is not None else 0.0)
         }
 
     def _update_state(self):
@@ -149,6 +152,9 @@ class UAVEnvWrapper(gym.Env):
             self.uav_states
         )
         
+        # 计算服务用户比例
+        self.service_ratio = self.served_people / self.total_people if self.total_people > 0 else 0
+        
         return self._get_obs(), self._get_info()
 
     def step(self, actions):
@@ -176,13 +182,29 @@ class UAVEnvWrapper(gym.Env):
             self.uav_states
         )
         
+        # 计算服务用户比例
+        self.service_ratio = self.served_people / self.total_people if self.total_people > 0 else 0
+        
         # 奖励计算
         decay_factor = np.exp(-0.01 * self.current_step)  # 指数衰减因子
         epsilon = 1e-6  # 防止除零
         
-        self.reward = (self.alpha * self.observed_ratio * decay_factor) + \
-                 (self.beta * self.served_people) - \
-                 (self.gamma * (self.total_power / (self.served_people**2 + epsilon)))
+        # 观测奖励保持不变
+        observation_reward = self.alpha * self.observed_ratio * decay_factor
+        
+        # 服务用户奖励基于服务用户比例
+        service_reward = self.beta * self.service_ratio
+        
+        # 功率惩罚根据服务率动态调整权重
+        power_penalty_weight = self.gamma
+        if self.service_ratio > 0.9:  # 当服务率超过90%时
+            # 随着服务率提高，增加功率惩罚的权重（最大可达到原权重的2倍）
+            power_penalty_weight = self.gamma * (1 + (self.service_ratio - 0.9) * 10)
+        
+        # 功率惩罚与服务率相关
+        power_penalty = power_penalty_weight * (self.total_power / ((self.service_ratio**2) * self.total_people + epsilon))
+        
+        self.reward = observation_reward + service_reward - power_penalty
         
         # 检查终止条件
         terminated = self.current_step >= self.max_steps
