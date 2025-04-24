@@ -1,16 +1,24 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Sequence
+import warnings
+from typing import TYPE_CHECKING, Any, Dict, Sequence, Tuple
 
 import gymnasium as gym
 import numpy as np
 import torch
 from lightning import Fabric
 from torch import Tensor, nn
+from lightning.fabric.wrappers import _FabricModule
+from torch.distributions import Categorical
 
 from sheeprl.utils.env import make_env
 from sheeprl.utils.imports import _IS_MLFLOW_AVAILABLE
 from sheeprl.utils.utils import unwrap_fabric
+
+# 导入函数前，定义一个前向声明以防止循环导入
+normalize_density = None
+from sheeprl.algos.dreamer_v3_mod import dreamer_v3_mod
+normalize_density = dreamer_v3_mod.normalize_density
 
 if TYPE_CHECKING:
     from mlflow.models.model import ModelInfo
@@ -108,10 +116,12 @@ def prepare_obs(
     for k, v in obs.items():
         torch_obs[k] = torch.from_numpy(v.copy()).to(fabric.device).float()
         if k in cnn_keys:
-            torch_obs[k] = torch_obs[k].view(1, num_envs, -1, *v.shape[-2:]) / 255 - 0.5
+            if k == "density_matrix":  # 对密度矩阵使用特殊的归一化
+                torch_obs[k] = normalize_density(torch_obs[k].view(1, num_envs, -1, *v.shape[-2:]))
+            else:  # 对其他CNN输入使用标准图像归一化
+                torch_obs[k] = torch_obs[k].view(1, num_envs, -1, *v.shape[-2:]) / 255.0 - 0.5
         else:
             torch_obs[k] = torch_obs[k].view(1, num_envs, -1)
-
     return torch_obs
 
 

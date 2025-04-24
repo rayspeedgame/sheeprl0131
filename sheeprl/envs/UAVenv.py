@@ -1,20 +1,26 @@
 import json
 import numpy as np
+import os
+import glob
 import gymnasium as gym
 from gymnasium import spaces
 from sheeprl.envs.envfunc.UAV import get_observed_density, allocate_uav_service
 from sheeprl.envs.envfunc.Crowd import get_crowd_density, get_positions
 
 class UAVEnvWrapper(gym.Env):
-    def __init__(self, config_path="config.json", db_path="crowd_dataset/exhibition2.sqlite"):
+    def __init__(self, config_path="config.json", db_path="crowd_dataset/exhibition2.sqlite", db_dir="crowd_dataset"):
         super(UAVEnvWrapper, self).__init__()
         
         # 从配置文件加载参数
         with open(config_path) as f:
             self.config = json.load(f)
         
-        # 数据库路径
+        # 数据库目录和路径
+        self.db_dir = db_dir
         self.db_path = db_path
+        self.db_list = None
+        self.current_db_index = 0
+        self._update_db_list()
         
         # 环境参数
         self.n_uav = self.config["n_uav"]
@@ -64,6 +70,38 @@ class UAVEnvWrapper(gym.Env):
         self.total_power = None  # 添加总发射功率
         self.served_people = None  # 添加服务人数
         self.service_ratio = None  # 添加服务比例
+        
+        # 数据库切换标志
+        self.db_finished = False
+        self.max_frames = self.config.get("max_frames_per_db", 3000)  # 每个数据库的最大帧数
+
+    def _update_db_list(self):
+        """更新数据库列表"""
+        self.db_list = sorted(glob.glob(os.path.join(self.db_dir, "exhibition*.sqlite")))
+        if not self.db_list:
+            raise ValueError(f"在目录 {self.db_dir} 中未找到数据库文件")
+        
+        # 如果当前数据库不在列表中，将其添加到列表中
+        if self.db_path not in self.db_list:
+            self.db_list.append(self.db_path)
+        
+        # 设置当前数据库索引
+        try:
+            self.current_db_index = self.db_list.index(self.db_path)
+        except ValueError:
+            self.current_db_index = 0
+            self.db_path = self.db_list[0]
+        
+        print(f"加载数据库列表: {self.db_list}")
+        print(f"当前使用数据库: {self.db_path} (索引: {self.current_db_index})")
+
+    def _switch_to_next_db(self):
+        """切换到下一个数据库"""
+        self.current_db_index = (self.current_db_index + 1) % len(self.db_list)
+        self.db_path = self.db_list[self.current_db_index]
+        self.db_finished = False
+        print(f"切换到新数据库: {self.db_path}")
+        return True
 
     def _get_info(self):
         """返回当前环境的额外信息
@@ -78,6 +116,8 @@ class UAVEnvWrapper(gym.Env):
                 - total_power: 无人机总发射功率
                 - served_people: 服务的人数
                 - service_ratio: 服务人群占总人群的比例
+                - current_db: 当前使用的数据库
+                - db_finished: 当前数据库是否已完成
         """
         # 将无人机位置展平为一维数组
         flat_uav_positions = self.uav_positions.flatten()
@@ -102,7 +142,9 @@ class UAVEnvWrapper(gym.Env):
             "observed_area_ratio": np.float32(self.observed_area_ratio if self.observed_area_ratio is not None else 0.0),
             "total_power": np.float32(self.total_power if self.total_power is not None else 0.0),
             "served_people": np.float32(self.served_people if self.served_people is not None else 0.0),
-            "service_ratio": np.float32(self.service_ratio if self.service_ratio is not None else 0.0)
+            "service_ratio": np.float32(self.service_ratio if self.service_ratio is not None else 0.0),
+            "current_db": self.db_path,
+            "db_finished": self.db_finished
         }
 
     def _update_state(self):
@@ -111,6 +153,11 @@ class UAVEnvWrapper(gym.Env):
             # 计算帧ID
             self.frame_id = int(self.current_step * self.fps)
             
+            # 检查是否超出当前数据库的最大帧数
+            if self.frame_id >= self.max_frames:
+                self.db_finished = True
+                return
+            
             # 获取完整的密度分布
             self.full_density = get_crowd_density(
                 self.density_size,
@@ -118,6 +165,12 @@ class UAVEnvWrapper(gym.Env):
                 self.frame_id,
                 db_path=self.db_path
             )
+            
+            # 检查从数据库获取的人群密度是否有效
+            if self.full_density is None or np.sum(self.full_density) <= 0:
+                print(f"警告: 在帧 {self.frame_id} 中未获取到有效的人群密度数据，可能已到达数据库末尾")
+                self.db_finished = True
+                return
             
             # 获取观测到的密度矩阵和观测掩码
             self.observed_density, self.observation_mask = get_observed_density(
@@ -139,6 +192,9 @@ class UAVEnvWrapper(gym.Env):
             self.observed_area_ratio = observed_area / total_area
         except Exception as e:
             print(f"更新环境状态时出错: {e}")
+            # 标记数据库已完成
+            self.db_finished = True
+            
             # 设置合理的默认值，避免进一步的计算错误
             if not hasattr(self, 'frame_id') or self.frame_id is None:
                 self.frame_id = int(self.current_step * self.fps)
@@ -158,6 +214,12 @@ class UAVEnvWrapper(gym.Env):
             self.observed_area_ratio = 0
 
     def reset(self, seed=None, options=None):
+        # 重置环境前检查数据库是否已完成
+        if options is not None and options.get("switch_db", False):
+            self._switch_to_next_db()
+        elif self.db_finished:
+            self._switch_to_next_db()
+        
         # 重置环境时间
         self.current_step = 10  # 根据需求初始化为10
         
@@ -173,8 +235,16 @@ class UAVEnvWrapper(gym.Env):
         self.uav_states[:, 0] = np.arange(self.n_uav)  # 设置id
         self.uav_states[:, 1:4] = self.uav_positions   # 设置位置
         
+        # 重置数据库状态标志
+        self.db_finished = False
+        
         # 更新环境状态和缓存值
         self._update_state()
+        
+        # 如果更新后数据库标记为完成，则切换到下一个数据库并再次重置
+        if self.db_finished:
+            self._switch_to_next_db()
+            return self.reset(seed=seed)
         
         # 初始化能量和服务人数
         self.total_power, self.served_people = allocate_uav_service(
@@ -206,6 +276,18 @@ class UAVEnvWrapper(gym.Env):
         
         # 更新环境状态和缓存的计算值
         self._update_state()
+        
+        # 检查数据库是否已完成
+        if self.db_finished:
+            # 设置终止标志
+            terminated = True
+            truncated = False
+            
+            # 设置最终奖励
+            self.reward = 0.0
+            
+            # 返回结果，指示环境需要重置
+            return self._get_obs(), self.reward, terminated, truncated, self._get_info()
         
         # 计算服务人数和能量消耗
         self.total_power, self.served_people = allocate_uav_service(

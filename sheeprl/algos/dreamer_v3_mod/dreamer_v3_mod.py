@@ -45,6 +45,19 @@ from sheeprl.utils.utils import Ratio, save_configs
 # os.environ["MUJOCO_GL"] = "osmesa"
 
 
+def normalize_density(density_matrix, max_value=20.0):
+    """对密度矩阵进行特殊归一化处理
+    
+    Args:
+        density_matrix: 输入的密度矩阵
+        max_value: 预设的密度矩阵最大值，默认为20.0
+    
+    Returns:
+        归一化后的密度矩阵，范围为[-0.5, 0.5]
+    """
+    return density_matrix / max_value - 0.5
+
+
 def train(
     fabric: Fabric,
     world_model: WorldModel,
@@ -95,10 +108,20 @@ def train(
     stochastic_size = cfg.algo.world_model.stochastic_size
     discrete_size = cfg.algo.world_model.discrete_size
     device = fabric.device
-    batch_obs = {k: data[k] / 255.0 - 0.5 for k in cfg.algo.cnn_keys.encoder} # 考虑删除归一化                                                                                                                                                                                                             
+    # 对图像数据进行标准归一化，对密度矩阵进行特殊处理
+    batch_obs = {}
+    for k in cfg.algo.cnn_keys.encoder:
+        if k == "density_matrix":  # 对密度矩阵使用特殊的归一化
+            batch_obs[k] = normalize_density(data[k])  # 使用normalize_density函数
+        else:  # 对其他CNN输入使用标准图像归一化
+            batch_obs[k] = data[k] / 255.0 - 0.5
     batch_obs.update({k: data[k] for k in cfg.algo.mlp_keys.encoder})
-    # 创建batch_full_obs，包含完整的人群分布数据
-    batch_full_obs = {"density_matrix": data["full_density"]} if "full_density" in data else {}
+    
+    # 创建batch_full_obs，包含完整的人群分布数据，并进行特殊归一化
+    batch_full_obs = {}
+    if "full_density" in data:
+        # 对完整观测的密度矩阵进行相同的归一化处理
+        batch_full_obs["density_matrix"] = normalize_density(data["full_density"])  # 使用normalize_density函数
 
     # 单独提取观测比例信息
     observed_ratio = data["observed_ratio"] if "observed_ratio" in data else None
@@ -179,8 +202,8 @@ def train(
     pr = TwoHotEncodingDistribution(world_model.reward_model(reward_model_combined_input), dims=1) # 需要加入action或者position
 
     # Compute the distribution over the terminal steps, if required
-    pc = Independent(BernoulliSafeMode(logits=world_model.continue_model(latent_states)), 1) # 可能可以删除
-    continues_targets = 1 - data["terminated"]
+    # pc = Independent(BernoulliSafeMode(logits=world_model.continue_model(latent_states)), 1) # 可能可以删除
+    # continues_targets = 1 - data["terminated"]
 
     # Reshape posterior and prior logits to shape [B, T, 32, 32]
     priors_logits = priors_logits.view(*priors_logits.shape[:-1], stochastic_size, discrete_size)
@@ -200,7 +223,7 @@ def train(
         cfg.algo.world_model.kl_representation,
         cfg.algo.world_model.kl_free_nats,
         cfg.algo.world_model.kl_regularizer,
-        pc,
+        None, # pc
         continues_targets,
         cfg.algo.world_model.continue_scale_factor,
         observed_ratio,
@@ -575,7 +598,8 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
         uav_positions = np.stack(info["uav_positions"])  # 形状变为 (num_envs, n_uav, 3)
         step_data["uav_positions"] = uav_positions[np.newaxis]  # 添加时间维度，变为 (1, num_envs, n_uav, 3)
     if "full_density" in info:
-        # 同样处理full_density
+        # 同样处理full_density - 保存原始数据，不进行归一化
+        # 归一化操作会在训练过程中通过normalize_density函数完成
         full_density = np.stack(info["full_density"])  # 形状变为 (num_envs, density_size, density_size)
         step_data["full_density"] = full_density[np.newaxis]  # 添加时间维度，变为 (1, num_envs, density_size, density_size)
     if "frame_id" in info:
@@ -658,7 +682,8 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                     step_data["uav_positions"] = uav_positions[np.newaxis]  # 添加时间维度，变为 (1, num_envs, n_uav, 3)
 
                 if "full_density" in infos:
-                    # 同样处理full_density
+                    # 同样处理full_density - 保存原始数据，不进行归一化
+                    # 归一化操作会在训练过程中通过normalize_density函数完成
                     full_density = np.stack(infos["full_density"])  # 形状变为 (num_envs, density_size, density_size)
                     step_data["full_density"] = full_density[np.newaxis]  # 添加时间维度，变为 (1, num_envs, density_size, density_size)
 
@@ -809,6 +834,7 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                 if "uav_positions" in step_data:
                     reset_data["uav_positions"] = np.array(step_data["uav_positions"][:, dones_idxes], dtype=np.float32)
                 if "full_density" in step_data:
+                    # 保存原始密度数据，归一化操作会在训练过程中进行
                     reset_data["full_density"] = np.array(step_data["full_density"][:, dones_idxes], dtype=np.float32)
                 if "frame_id" in step_data:
                     reset_data["frame_id"] = np.array(step_data["frame_id"][:, dones_idxes], dtype=np.int32)
