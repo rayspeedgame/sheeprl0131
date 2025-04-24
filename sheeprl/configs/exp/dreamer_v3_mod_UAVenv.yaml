@@ -26,7 +26,7 @@ buffer:
 
 # Algorithm
 algo:
-  total_steps: 90000
+  total_steps: 24000
   cnn_keys:
     encoder: [density_matrix]
     decoder: ${algo.cnn_keys.encoder}
