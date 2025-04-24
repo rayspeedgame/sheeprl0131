@@ -6,7 +6,7 @@ from sheeprl.envs.envfunc.UAV import get_observed_density, allocate_uav_service
 from sheeprl.envs.envfunc.Crowd import get_crowd_density, get_positions
 
 class UAVEnvWrapper(gym.Env):
-    def __init__(self, config_path="config.json", db_path="exhibition2.sqlite"):
+    def __init__(self, config_path="config.json", db_path="crowd_dataset/exhibition1.sqlite"):
         super(UAVEnvWrapper, self).__init__()
         
         # 从配置文件加载参数
