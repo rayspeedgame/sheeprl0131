@@ -82,11 +82,18 @@ def get_positions(frame_id, db_path='exhibition.sqlite'):
         ORDER BY id
     """, (frame_id,))
     
-    # 将结果转换为numpy数组
-    positions = np.array(cursor.fetchall())
+    # 获取查询结果
+    results = cursor.fetchall()
     
     # 关闭数据库连接
     conn.close()
+    
+    # 如果结果为空，返回一个空的二维数组，形状为(0,3)
+    if not results:
+        return np.zeros((0, 3))
+    
+    # 将结果转换为numpy数组
+    positions = np.array(results)
     
     return positions
 

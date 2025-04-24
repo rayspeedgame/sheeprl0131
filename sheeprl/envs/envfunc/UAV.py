@@ -26,6 +26,12 @@ def allocate_uav_service(frame_id, uav_states, max_power=1.0, db_path='exhibitio
     
     # 1. 获取游客位置信息
     visitor_positions = get_positions(frame_id, db_path=db_path)
+    
+    # 检查visitor_positions是否为空或一维数组
+    if len(visitor_positions) == 0 or visitor_positions.ndim == 1:
+        # 返回零功率和零服务人数
+        return 0.0, 0
+    
     visitor_status = np.zeros((len(visitor_positions), 4))  # [visitor_id, x, y, served_flag]
     visitor_status[:, 0] = visitor_positions[:, 0]  # ID
     visitor_status[:, 1:3] = visitor_positions[:, 1:3]  # x, y coordinates
@@ -111,26 +117,39 @@ def get_observed_density(frame_id, uav_positions, grid_rows=10, grid_cols=10, fl
             - observed_density: 观测到的人群密度矩阵 (grid_rows x grid_cols)
             - observation_mask: 观测掩码，指示哪些区域被观测到 (grid_rows x grid_cols)
     """
-
-    
     # 获取人群密度信息
     density_matrix = get_crowd_density(grid_cols, grid_rows, frame_id, db_path=db_path)
     
     # 创建观测掩码矩阵（标记哪些网格可以被观测到）
     observation_mask = np.zeros((grid_rows, grid_cols), dtype=bool)
     
+    # 检查无人机位置是否有效
+    if uav_positions is None or len(uav_positions) == 0:
+        # 如果无人机位置数据无效，返回全零密度和掩码
+        return np.zeros((grid_rows, grid_cols)), observation_mask
+    
+    # 确保uav_positions至少有4列（id, x, y, z）
+    if uav_positions.shape[1] < 4:
+        # 如果列数不足，返回全零密度和掩码
+        return np.zeros((grid_rows, grid_cols)), observation_mask
+    
     # 获取场地范围（从metadata表）
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT value FROM metadata WHERE key = 'xmin'")
-    min_x = float(cursor.fetchone()[0])
-    cursor.execute("SELECT value FROM metadata WHERE key = 'xmax'")
-    max_x = float(cursor.fetchone()[0])
-    cursor.execute("SELECT value FROM metadata WHERE key = 'ymin'")
-    min_y = float(cursor.fetchone()[0])
-    cursor.execute("SELECT value FROM metadata WHERE key = 'ymax'")
-    max_y = float(cursor.fetchone()[0])
-    conn.close()
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM metadata WHERE key = 'xmin'")
+        min_x = float(cursor.fetchone()[0])
+        cursor.execute("SELECT value FROM metadata WHERE key = 'xmax'")
+        max_x = float(cursor.fetchone()[0])
+        cursor.execute("SELECT value FROM metadata WHERE key = 'ymin'")
+        min_y = float(cursor.fetchone()[0])
+        cursor.execute("SELECT value FROM metadata WHERE key = 'ymax'")
+        max_y = float(cursor.fetchone()[0])
+        conn.close()
+    except Exception as e:
+        # 如果数据库查询出错，返回全零密度和掩码
+        print(f"查询元数据出错: {e}")
+        return np.zeros((grid_rows, grid_cols)), observation_mask
     
     # 计算每个网格的大小
     grid_width = (max_x - min_x) / grid_cols
@@ -145,18 +164,26 @@ def get_observed_density(frame_id, uav_positions, grid_rows=10, grid_cols=10, fl
     
     # 对每个无人机
     for uav in uav_positions:
-        uav_x, uav_y, uav_z = uav[1:4]
-        # 计算观测半径（平面距离）
-        observation_radius = uav_z * np.tan(flare_angle_rad)
-        
-        # 检查每个网格中心点是否在观测范围内
-        for i, y in enumerate(y_centers):
-            for j, x in enumerate(x_centers):
-                # 计算平面距离
-                plane_distance = np.sqrt((x - uav_x)**2 + (y - uav_y)**2)
-                if plane_distance <= observation_radius:
-                    # 注意：i是从下到上的行索引
-                    observation_mask[grid_rows-1-i, j] = True
+        try:
+            uav_x, uav_y, uav_z = uav[1:4]
+            # 确保高度是正值
+            if uav_z <= 0:
+                continue
+                
+            # 计算观测半径（平面距离）
+            observation_radius = uav_z * np.tan(flare_angle_rad)
+            
+            # 检查每个网格中心点是否在观测范围内
+            for i, y in enumerate(y_centers):
+                for j, x in enumerate(x_centers):
+                    # 计算平面距离
+                    plane_distance = np.sqrt((x - uav_x)**2 + (y - uav_y)**2)
+                    if plane_distance <= observation_radius:
+                        # 注意：i是从下到上的行索引
+                        observation_mask[grid_rows-1-i, j] = True
+        except (IndexError, ValueError) as e:
+            print(f"处理无人机数据时出错: {e}")
+            continue
     
     # 将未观测到的区域密度设为0
     observed_density = np.where(observation_mask, density_matrix, 0)

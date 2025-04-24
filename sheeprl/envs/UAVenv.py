@@ -82,19 +82,24 @@ class UAVEnvWrapper(gym.Env):
         # 将无人机位置展平为一维数组
         flat_uav_positions = self.uav_positions.flatten()
         
-        # 将完整密度矩阵添加通道维度（如果尚未添加）
-        if self.full_density.ndim == 2:
-            full_density_with_channel = self.full_density.astype(np.float32)[np.newaxis, :, :]
+        # 检查full_density是否为None或为空
+        if self.full_density is None:
+            # 创建一个零矩阵作为替代
+            full_density_with_channel = np.zeros((1, self.density_size, self.density_size), dtype=np.float32)
         else:
-            full_density_with_channel = self.full_density
+            # 将完整密度矩阵添加通道维度（如果尚未添加）
+            if self.full_density.ndim == 2:
+                full_density_with_channel = self.full_density.astype(np.float32)[np.newaxis, :, :]
+            else:
+                full_density_with_channel = self.full_density
         
         return {
             # 确保返回的是numpy数组类型
             "uav_positions": np.array(flat_uav_positions, dtype=np.float32),
             "full_density": full_density_with_channel,
             "frame_id": self.frame_id,
-            "observed_ratio": np.float32(self.observed_ratio),
-            "observed_area_ratio": np.float32(self.observed_area_ratio),
+            "observed_ratio": np.float32(self.observed_ratio if self.observed_ratio is not None else 0.0),
+            "observed_area_ratio": np.float32(self.observed_area_ratio if self.observed_area_ratio is not None else 0.0),
             "total_power": np.float32(self.total_power if self.total_power is not None else 0.0),
             "served_people": np.float32(self.served_people if self.served_people is not None else 0.0),
             "service_ratio": np.float32(self.service_ratio if self.service_ratio is not None else 0.0)
@@ -102,35 +107,55 @@ class UAVEnvWrapper(gym.Env):
 
     def _update_state(self):
         """更新环境状态和相关计算值"""
-        # 计算帧ID
-        self.frame_id = int(self.current_step * self.fps)
-        
-        # 获取完整的密度分布
-        self.full_density = get_crowd_density(
-            self.density_size,
-            self.density_size,
-            self.frame_id,
-            db_path=self.db_path
-        )
-        
-        # 获取观测到的密度矩阵和观测掩码
-        self.observed_density, self.observation_mask = get_observed_density(
-            self.frame_id, 
-            self.uav_states, 
-            self.density_size, 
-            self.density_size,
-            db_path=self.db_path
-        )
-        
-        # 计算各种统计数据
-        self.total_people = np.sum(self.full_density)
-        self.observed_people = np.sum(self.observed_density)
-        self.observed_ratio = self.observed_people / self.total_people if self.total_people > 0 else 0
-        
-        # 计算观测区域比例
-        observed_area = np.count_nonzero(self.observation_mask)
-        total_area = self.density_size * self.density_size
-        self.observed_area_ratio = observed_area / total_area
+        try:
+            # 计算帧ID
+            self.frame_id = int(self.current_step * self.fps)
+            
+            # 获取完整的密度分布
+            self.full_density = get_crowd_density(
+                self.density_size,
+                self.density_size,
+                self.frame_id,
+                db_path=self.db_path
+            )
+            
+            # 获取观测到的密度矩阵和观测掩码
+            self.observed_density, self.observation_mask = get_observed_density(
+                self.frame_id, 
+                self.uav_states, 
+                self.density_size, 
+                self.density_size,
+                db_path=self.db_path
+            )
+            
+            # 计算各种统计数据
+            self.total_people = np.sum(self.full_density)
+            self.observed_people = np.sum(self.observed_density)
+            self.observed_ratio = self.observed_people / self.total_people if self.total_people > 0 else 0
+            
+            # 计算观测区域比例
+            observed_area = np.count_nonzero(self.observation_mask)
+            total_area = self.density_size * self.density_size
+            self.observed_area_ratio = observed_area / total_area
+        except Exception as e:
+            print(f"更新环境状态时出错: {e}")
+            # 设置合理的默认值，避免进一步的计算错误
+            if not hasattr(self, 'frame_id') or self.frame_id is None:
+                self.frame_id = int(self.current_step * self.fps)
+                
+            if not hasattr(self, 'full_density') or self.full_density is None:
+                self.full_density = np.zeros((self.density_size, self.density_size))
+                
+            if not hasattr(self, 'observed_density') or self.observed_density is None:
+                self.observed_density = np.zeros((self.density_size, self.density_size))
+                
+            if not hasattr(self, 'observation_mask') or self.observation_mask is None:
+                self.observation_mask = np.zeros((self.density_size, self.density_size), dtype=bool)
+                
+            self.total_people = 0
+            self.observed_people = 0
+            self.observed_ratio = 0
+            self.observed_area_ratio = 0
 
     def reset(self, seed=None, options=None):
         # 重置环境时间
@@ -196,6 +221,14 @@ class UAVEnvWrapper(gym.Env):
         decay_factor = np.exp(-0.01 * self.current_step)  # 指数衰减因子
         epsilon = 1e-6  # 防止除零
         
+        # 特殊情况：如果没有人群，给予中性奖励
+        if self.total_people <= 0:
+            self.reward = 0.0
+            # 检查终止条件
+            terminated = self.current_step >= self.max_steps
+            truncated = False  # 可根据需要添加其他终止条件
+            return self._get_obs(), self.reward, terminated, truncated, self._get_info()
+        
         # 观测奖励保持不变
         observation_reward = self.alpha * self.observed_ratio * decay_factor
         
@@ -209,7 +242,13 @@ class UAVEnvWrapper(gym.Env):
             power_penalty_weight = self.gamma * (1 + (self.service_ratio - 0.9) * 10)
         
         # 功率惩罚与服务率相关
-        power_penalty = power_penalty_weight * (self.total_power / ((self.service_ratio**2) * self.total_people + epsilon))
+        # 增加额外检查，避免除数过小
+        denominator = (self.service_ratio**2) * self.total_people + epsilon
+        if denominator > epsilon:  # 确保分母有意义
+            power_penalty = power_penalty_weight * (self.total_power / denominator)
+        else:
+            # 如果分母太小，使用一个备选公式
+            power_penalty = power_penalty_weight * self.total_power
         
         self.reward = observation_reward + service_reward - power_penalty
         
