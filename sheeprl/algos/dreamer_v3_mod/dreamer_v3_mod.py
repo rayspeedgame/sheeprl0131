@@ -212,7 +212,7 @@ def train(
         cfg.algo.world_model.kl_free_nats,
         cfg.algo.world_model.kl_regularizer,
         None, # pc
-        continues_targets,
+        None,
         cfg.algo.world_model.continue_scale_factor,
         observed_ratio,
         observed_area_ratio,
