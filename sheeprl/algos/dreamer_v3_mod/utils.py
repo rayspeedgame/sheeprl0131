@@ -15,10 +15,24 @@ from sheeprl.utils.env import make_env
 from sheeprl.utils.imports import _IS_MLFLOW_AVAILABLE
 from sheeprl.utils.utils import unwrap_fabric
 
+# 移除循环导入
 # 导入函数前，定义一个前向声明以防止循环导入
-normalize_density = None
-from sheeprl.algos.dreamer_v3_mod import dreamer_v3_mod
-normalize_density = dreamer_v3_mod.normalize_density
+# normalize_density = None
+# from sheeprl.algos.dreamer_v3_mod import dreamer_v3_mod
+# normalize_density = dreamer_v3_mod.normalize_density
+
+# 直接在此文件中定义normalize_density函数
+def normalize_density(density_matrix, max_value=20.0):
+    """对密度矩阵进行特殊归一化处理
+    
+    Args:
+        density_matrix: 输入的密度矩阵
+        max_value: 预设的密度矩阵最大值，默认为20.0
+    
+    Returns:
+        归一化后的密度矩阵，范围为[-0.5, 0.5]
+    """
+    return density_matrix / max_value - 0.5
 
 if TYPE_CHECKING:
     from mlflow.models.model import ModelInfo

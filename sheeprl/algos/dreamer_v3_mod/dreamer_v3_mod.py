@@ -39,23 +39,11 @@ from sheeprl.utils.metric import MetricAggregator
 from sheeprl.utils.registry import register_algorithm
 from sheeprl.utils.timer import timer
 from sheeprl.utils.utils import Ratio, save_configs
+from sheeprl.algos.dreamer_v3_mod.utils import normalize_density
 
 # Decomment the following two lines if you cannot start an experiment with DMC environments
 # os.environ["PYOPENGL_PLATFORM"] = ""
 # os.environ["MUJOCO_GL"] = "osmesa"
-
-
-def normalize_density(density_matrix, max_value=20.0):
-    """对密度矩阵进行特殊归一化处理
-    
-    Args:
-        density_matrix: 输入的密度矩阵
-        max_value: 预设的密度矩阵最大值，默认为20.0
-    
-    Returns:
-        归一化后的密度矩阵，范围为[-0.5, 0.5]
-    """
-    return density_matrix / max_value - 0.5
 
 
 def train(
