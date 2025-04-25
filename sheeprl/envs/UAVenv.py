@@ -3,6 +3,7 @@ import numpy as np
 import os
 import glob
 import gymnasium as gym
+import sqlite3
 from gymnasium import spaces
 from sheeprl.envs.envfunc.UAV import get_observed_density, allocate_uav_service
 from sheeprl.envs.envfunc.Crowd import get_crowd_density, get_positions
@@ -73,7 +74,34 @@ class UAVEnvWrapper(gym.Env):
         
         # 数据库切换标志
         self.db_finished = False
-        self.max_frames = self.config.get("max_frames_per_db", 3000)  # 每个数据库的最大帧数
+        # 读取当前数据库的最大帧数
+        self.max_frames = self._get_max_frame_from_db(self.db_path)
+
+    def _get_max_frame_from_db(self, db_path):
+        """从数据库中读取最大帧数"""
+        try:
+            # 连接数据库
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # 查询frame_data表中的最大frame值
+            cursor.execute("SELECT MAX(frame) FROM frame_data")
+            max_frame = cursor.fetchone()[0]
+            
+            # 关闭连接
+            conn.close()
+            
+            # 如果找不到有效的最大帧，设置一个默认值
+            if max_frame is None:
+                print(f"警告: 在数据库 {db_path} 中未找到有效的帧数据，使用默认值3000")
+                return 3000
+                
+            print(f"数据库 {db_path} 中的最大帧数: {max_frame}")
+            return max_frame
+            
+        except Exception as e:
+            print(f"从数据库读取最大帧数时出错: {e}，使用默认值3000")
+            return 3000
 
     def _update_db_list(self):
         """更新数据库列表"""
@@ -100,7 +128,9 @@ class UAVEnvWrapper(gym.Env):
         self.current_db_index = (self.current_db_index + 1) % len(self.db_list)
         self.db_path = self.db_list[self.current_db_index]
         self.db_finished = False
-        print(f"切换到新数据库: {self.db_path}")
+        # 更新最大帧数
+        self.max_frames = self._get_max_frame_from_db(self.db_path)
+        print(f"切换到新数据库: {self.db_path}，最大帧数: {self.max_frames}")
         return True
 
     def _get_info(self):
@@ -118,6 +148,7 @@ class UAVEnvWrapper(gym.Env):
                 - service_ratio: 服务人群占总人群的比例
                 - current_db: 当前使用的数据库
                 - db_finished: 当前数据库是否已完成
+                - max_frames: 当前数据库的最大帧数
         """
         # 将无人机位置展平为一维数组
         flat_uav_positions = self.uav_positions.flatten()
@@ -144,7 +175,8 @@ class UAVEnvWrapper(gym.Env):
             "served_people": np.float32(self.served_people if self.served_people is not None else 0.0),
             "service_ratio": np.float32(self.service_ratio if self.service_ratio is not None else 0.0),
             "current_db": self.db_path,
-            "db_finished": self.db_finished
+            "db_finished": self.db_finished,
+            "max_frames": self.max_frames
         }
 
     def _update_state(self):
