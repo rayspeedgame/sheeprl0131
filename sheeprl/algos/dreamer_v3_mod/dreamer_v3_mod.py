@@ -575,7 +575,7 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
     obs, info = envs.reset(seed=cfg.seed)
     for k in obs_keys:
         step_data[k] = obs[k][np.newaxis]
-    step_data["rewards"] = np.zeros((1, cfg.env.num_envs, 1)) # 奖励可能要导入真实奖励
+    step_data["rewards"] = np.zeros((1, cfg.env.num_envs, 1)) # 奖励可能要导入真实奖励，暂时为0
     step_data["truncated"] = np.zeros((1, cfg.env.num_envs, 1))
     step_data["terminated"] = np.zeros((1, cfg.env.num_envs, 1))
     step_data["is_first"] = np.ones_like(step_data["terminated"])

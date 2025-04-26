@@ -1,0 +1,42 @@
+# @package _global_
+
+defaults:
+  - ppo_mod
+  - override /algo: ppo_mod
+  - override /env: UAVenv
+  - _self_
+
+# Experiment
+seed: 5
+
+# Environment
+env:
+  num_envs: 1
+  id: uav
+
+# Checkpoint
+checkpoint:
+  every: 10000
+
+# Buffer
+buffer:
+  size: 500000
+  checkpoint: True
+  memmap: True
+
+# Algorithm
+algo:
+  total_steps: 24000
+  cnn_keys:
+    encoder: [density_matrix]
+    decoder: ${algo.cnn_keys.encoder}
+  mlp_keys:
+    encoder: []
+    decoder: ${algo.mlp_keys.encoder}
+  per_rank_batch_size: 256
+
+  
+
+# Metric
+metric:
+  log_every: 5000
