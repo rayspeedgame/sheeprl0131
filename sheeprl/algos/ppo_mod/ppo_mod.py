@@ -257,7 +257,22 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
 
     # Get the first environment observation and start the optimization
     step_data = {}
-    next_obs = envs.reset(seed=cfg.seed)[0]  # [N_envs, N_obs]
+    next_obs, info = envs.reset(seed=cfg.seed)  # [N_envs, N_obs]
+    
+    # 记录初始环境信息
+    if cfg.metric.log_level > 0 and aggregator and not aggregator.disabled:
+        # 初始环境信息记录
+        if "observed_ratio" in info and info["observed_ratio"] is not None:
+            aggregator.update("Metrics/observed_ratio", info["observed_ratio"].mean())
+        if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
+            aggregator.update("Metrics/area_ratio", info["observed_area_ratio"].mean())
+        if "service_ratio" in info and info["service_ratio"] is not None:
+            aggregator.update("Metrics/service_ratio", info["service_ratio"].mean())
+        if "total_power" in info and info["total_power"] is not None:
+            aggregator.update("Metrics/total_power", info["total_power"].mean())
+        if "served_people" in info and info["served_people"] is not None:
+            aggregator.update("Metrics/served_people", info["served_people"].mean())
+    
     for k in obs_keys:
         if k in cfg.algo.cnn_keys.encoder:
             next_obs[k] = next_obs[k].reshape(cfg.env.num_envs, -1, *next_obs[k].shape[-2:])
@@ -284,6 +299,22 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
 
                     # Single environment step
                     obs, rewards, terminated, truncated, info = envs.step(real_actions.reshape(envs.action_space.shape))
+                    
+                    # 记录环境指标
+                    if cfg.metric.log_level > 0 and aggregator and not aggregator.disabled:
+                        if "observed_ratio" in info and info["observed_ratio"] is not None:
+                            aggregator.update("Metrics/observed_ratio", info["observed_ratio"].mean())
+                        if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
+                            aggregator.update("Metrics/area_ratio", info["observed_area_ratio"].mean())
+                        if "service_ratio" in info and info["service_ratio"] is not None:
+                            aggregator.update("Metrics/service_ratio", info["service_ratio"].mean())
+                        if "total_power" in info and info["total_power"] is not None:
+                            aggregator.update("Metrics/total_power", info["total_power"].mean())
+                        if "served_people" in info and info["served_people"] is not None:
+                            aggregator.update("Metrics/served_people", info["served_people"].mean())
+                        # 如果有原始奖励值，也记录下来
+                        aggregator.update("Metrics/reward", rewards.mean())
+                    
                     truncated_envs = np.nonzero(truncated)[0]
                     if len(truncated_envs) > 0:
                         real_next_obs = {

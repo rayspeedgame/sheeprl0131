@@ -18,8 +18,48 @@ from sheeprl.utils.utils import unwrap_fabric
 if TYPE_CHECKING:
     from mlflow.models.model import ModelInfo
 
-AGGREGATOR_KEYS = {"Rewards/rew_avg", "Game/ep_len_avg", "Loss/value_loss", "Loss/policy_loss", "Loss/entropy_loss"}
+AGGREGATOR_KEYS = {
+    "Rewards/rew_avg", 
+    "Game/ep_len_avg", 
+    "Loss/value_loss", 
+    "Loss/policy_loss", 
+    "Loss/entropy_loss",
+    "Metrics/observed_ratio",
+    "Metrics/area_ratio",
+    "Metrics/reward",
+    "Metrics/total_power",
+    "Metrics/served_people",
+    "Metrics/service_ratio",
+    "Test/cumulative_reward",
+    "Test/episode_length",
+    "Test/observed_ratio_mean",
+    "Test/observed_area_ratio_mean",
+    "Test/service_ratio_mean",
+    "Test/reward_mean",
+    "Test/reward_std",
+    "Test/total_power_mean",
+    "Test/served_people_mean",
+    "Test_Steps/reward",
+    "Test_Steps/observed_ratio",
+    "Test_Steps/observed_area_ratio",
+    "Test_Steps/service_ratio",
+    "Test_Steps/total_power",
+    "Test_Steps/served_people"
+}
 MODELS_TO_REGISTER = {"agent"}
+
+
+def normalize_density(density_matrix, max_value=20.0):
+    """对密度矩阵进行特殊归一化处理
+    
+    Args:
+        density_matrix: 输入的密度矩阵
+        max_value: 预设的密度矩阵最大值，默认为20.0
+    
+    Returns:
+        归一化后的密度矩阵，范围为[-0.5, 0.5]
+    """
+    return density_matrix / max_value - 0.5
 
 
 def prepare_obs(
@@ -29,7 +69,11 @@ def prepare_obs(
     for k in obs.keys():
         torch_obs[k] = torch.from_numpy(obs[k].copy()).to(fabric.device).float()
         if k in cnn_keys:
-            torch_obs[k] = torch_obs[k].reshape(num_envs, -1, *torch_obs[k].shape[-2:])
+            if k == "density_matrix":
+                torch_obs[k] = torch_obs[k].reshape(num_envs, -1, *torch_obs[k].shape[-2:])
+                torch_obs[k] = normalize_density(torch_obs[k])
+            else:
+                torch_obs[k] = torch_obs[k].reshape(num_envs, -1, *torch_obs[k].shape[-2:])
         else:
             torch_obs[k] = torch_obs[k].reshape(num_envs, -1)
     return normalize_obs(torch_obs, cnn_keys, obs.keys())
@@ -41,7 +85,24 @@ def test(agent: PPOPlayer, fabric: Fabric, cfg: Dict[str, Any], log_dir: str):
     agent.eval()
     done = False
     cumulative_rew = 0
-    obs = env.reset(seed=cfg.seed)[0]
+    obs, info = env.reset(seed=cfg.seed)
+    
+    episode_length = 0
+    step_metrics = []
+    
+    step_data = {"step": 0}
+    if "observed_ratio" in info and info["observed_ratio"] is not None:
+        step_data["observed_ratio"] = info["observed_ratio"]
+    if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
+        step_data["observed_area_ratio"] = info["observed_area_ratio"]
+    if "service_ratio" in info and info["service_ratio"] is not None:
+        step_data["service_ratio"] = info["service_ratio"]
+    if "total_power" in info and info["total_power"] is not None:
+        step_data["total_power"] = info["total_power"]
+    if "served_people" in info and info["served_people"] is not None:
+        step_data["served_people"] = info["served_people"]
+    
+    step_metrics.append(step_data)
 
     while not done:
         torch_obs = prepare_obs(fabric, obs, cnn_keys=cfg.algo.cnn_keys.encoder)
@@ -53,23 +114,70 @@ def test(agent: PPOPlayer, fabric: Fabric, cfg: Dict[str, Any], log_dir: str):
         else:
             actions = torch.cat([act.argmax(dim=-1) for act in actions], dim=-1)
 
-        # Single environment step
-        obs, reward, done, truncated, _ = env.step(actions.cpu().numpy().reshape(env.action_space.shape))
+        obs, reward, done, truncated, info = env.step(actions.cpu().numpy().reshape(env.action_space.shape))
         done = done or truncated
         cumulative_rew += reward
+        episode_length += 1
+        
+        step_data = {"step": episode_length, "reward": reward}
+        if "observed_ratio" in info and info["observed_ratio"] is not None:
+            step_data["observed_ratio"] = info["observed_ratio"]
+        if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
+            step_data["observed_area_ratio"] = info["observed_area_ratio"]
+        if "service_ratio" in info and info["service_ratio"] is not None:
+            step_data["service_ratio"] = info["service_ratio"]
+        if "total_power" in info and info["total_power"] is not None:
+            step_data["total_power"] = info["total_power"]
+        if "served_people" in info and info["served_people"] is not None:
+            step_data["served_people"] = info["served_people"]
+        
+        step_metrics.append(step_data)
 
         if cfg.dry_run:
             done = True
+            
     fabric.print("Test - Reward:", cumulative_rew)
+    fabric.print("Test - Episode Length:", episode_length)
+    
     if cfg.metric.log_level > 0:
-        fabric.log_dict({"Test/cumulative_reward": cumulative_rew}, 0)
+        metrics_dict = {"Test/cumulative_reward": cumulative_rew, "Test/episode_length": episode_length}
+        
+        metrics_avg = {}
+        for key in ["observed_ratio", "observed_area_ratio", "service_ratio", "reward", "total_power", "served_people"]:
+            values = [step[key] for step in step_metrics if key in step]
+            if values:
+                metrics_avg[f"Test/{key}_mean"] = np.mean(values)
+                if key == "reward" and len(values) > 1:
+                    metrics_avg[f"Test/{key}_std"] = np.std(values)
+        
+        metrics_dict.update(metrics_avg)
+        fabric.log_dict(metrics_dict, 0)
+        
+        for step_idx, step_data in enumerate(step_metrics):
+            step_metrics_dict = {}
+            for key, value in step_data.items():
+                if key != "step":
+                    step_metrics_dict[f"Test_Steps/{key}"] = value
+            
+            if step_metrics_dict:
+                fabric.log_dict(step_metrics_dict, step_idx)
+    
     env.close()
 
 
 def normalize_obs(
     obs: Dict[str, np.ndarray | Tensor], cnn_keys: Sequence[str], obs_keys: Sequence[str]
 ) -> Dict[str, np.ndarray | Tensor]:
-    return {k: obs[k] / 255 - 0.5 if k in cnn_keys else obs[k] for k in obs_keys}
+    normalized_obs = {}
+    for k in obs_keys:
+        if k in cnn_keys:
+            if k == "density_matrix":
+                normalized_obs[k] = obs[k]
+            else:
+                normalized_obs[k] = obs[k] / 255.0 - 0.5
+        else:
+            normalized_obs[k] = obs[k]
+    return normalized_obs
 
 
 def log_models(
