@@ -10,7 +10,7 @@ from lightning import Fabric
 from lightning.fabric.wrappers import _FabricModule
 from torch import Tensor
 
-from sheeprl.algos.ppo_mod.agent import PPOPlayer, build_agent
+from sheeprl.algos.ppo.agent import PPOPlayer, build_agent
 from sheeprl.utils.env import make_env
 from sheeprl.utils.imports import _IS_MLFLOW_AVAILABLE
 from sheeprl.utils.utils import unwrap_fabric
@@ -20,19 +20,6 @@ if TYPE_CHECKING:
 
 AGGREGATOR_KEYS = {"Rewards/rew_avg", "Game/ep_len_avg", "Loss/value_loss", "Loss/policy_loss", "Loss/entropy_loss"}
 MODELS_TO_REGISTER = {"agent"}
-
-
-def normalize_density(density_matrix, max_value=20.0):
-    """对密度矩阵进行特殊归一化处理
-    
-    Args:
-        density_matrix: 输入的密度矩阵
-        max_value: 预设的密度矩阵最大值，默认为20.0
-    
-    Returns:
-        归一化后的密度矩阵，范围为[-0.5, 0.5]
-    """
-    return density_matrix / max_value - 0.5
 
 
 def prepare_obs(
@@ -82,17 +69,7 @@ def test(agent: PPOPlayer, fabric: Fabric, cfg: Dict[str, Any], log_dir: str):
 def normalize_obs(
     obs: Dict[str, np.ndarray | Tensor], cnn_keys: Sequence[str], obs_keys: Sequence[str]
 ) -> Dict[str, np.ndarray | Tensor]:
-    normalized_obs = {}
-    for k in obs_keys:
-        if k == "density_matrix" and k in obs:
-            # 对密度矩阵使用特殊的归一化
-            normalized_obs[k] = normalize_density(obs[k])
-        elif k in cnn_keys and k in obs:
-            # 对其他CNN输入使用标准图像归一化
-            normalized_obs[k] = obs[k] / 255 - 0.5
-        elif k in obs:
-            normalized_obs[k] = obs[k]
-    return normalized_obs
+    return {k: obs[k] / 255 - 0.5 if k in cnn_keys else obs[k] for k in obs_keys}
 
 
 def log_models(

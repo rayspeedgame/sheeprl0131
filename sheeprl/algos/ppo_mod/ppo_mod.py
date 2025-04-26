@@ -262,20 +262,6 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
         if k in cfg.algo.cnn_keys.encoder:
             next_obs[k] = next_obs[k].reshape(cfg.env.num_envs, -1, *next_obs[k].shape[-2:])
         step_data[k] = next_obs[k][np.newaxis]
-        
-    # 保存UAV环境特有数据
-    if "uav_positions" in next_obs:
-        step_data["uav_positions"] = next_obs["uav_positions"][np.newaxis]
-    if "full_density" in next_obs:
-        step_data["full_density"] = next_obs["full_density"][np.newaxis]
-    if "observed_ratio" in next_obs:
-        step_data["observed_ratio"] = next_obs["observed_ratio"][np.newaxis]
-    if "observed_area_ratio" in next_obs:
-        step_data["observed_area_ratio"] = next_obs["observed_area_ratio"][np.newaxis]
-    if "service_ratio" in next_obs:
-        step_data["service_ratio"] = next_obs["service_ratio"][np.newaxis]
-    if "total_power" in next_obs:
-        step_data["total_power"] = next_obs["total_power"][np.newaxis]
 
     for iter_num in range(start_iter, total_iters + 1):
         with torch.inference_mode():
@@ -314,13 +300,7 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                                 torch_v = torch.as_tensor(v, dtype=torch.float32, device=device)
                                 if k in cfg.algo.cnn_keys.encoder:
                                     torch_v = torch_v.view(-1, *v.shape[-2:])
-                                    if k == "density_matrix":
-                                        # 对密度矩阵使用特殊的归一化
-                                        from sheeprl.algos.ppo_mod.utils import normalize_density
-                                        torch_v = normalize_density(torch_v)
-                                    else:
-                                        # 对其他图像使用标准归一化
-                                        torch_v = torch_v / 255.0 - 0.5
+                                    torch_v = torch_v / 255.0 - 0.5
                                 real_next_obs[k][i] = torch_v
                         vals = player.get_values(real_next_obs).cpu().numpy()
                         rewards[truncated_envs] += cfg.algo.gamma * vals.reshape(rewards[truncated_envs].shape)
@@ -337,20 +317,6 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                     step_data["returns"] = np.zeros_like(rewards, shape=(1, *rewards.shape))
                     step_data["advantages"] = np.zeros_like(rewards, shape=(1, *rewards.shape))
 
-                # 保存UAV环境特有数据
-                if "uav_positions" in info:
-                    step_data["uav_positions"] = np.array(info["uav_positions"], dtype=np.float32)[np.newaxis]
-                if "full_density" in info:
-                    step_data["full_density"] = np.array(info["full_density"], dtype=np.float32)[np.newaxis]
-                if "observed_ratio" in info:
-                    step_data["observed_ratio"] = np.array(info["observed_ratio"], dtype=np.float32)[np.newaxis]
-                if "observed_area_ratio" in info:
-                    step_data["observed_area_ratio"] = np.array(info["observed_area_ratio"], dtype=np.float32)[np.newaxis]
-                if "service_ratio" in info:
-                    step_data["service_ratio"] = np.array(info["service_ratio"], dtype=np.float32)[np.newaxis]
-                if "total_power" in info:
-                    step_data["total_power"] = np.array(info["total_power"], dtype=np.float32)[np.newaxis]
-
                 # Append data to buffer
                 rb.add(step_data, validate_args=cfg.buffer.validate_args)
 
@@ -362,20 +328,6 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                         _obs = _obs.reshape(cfg.env.num_envs, -1, *_obs.shape[-2:])
                     step_data[k] = _obs[np.newaxis]
                     next_obs[k] = _obs
-                    
-                # 更新UAV环境特有数据
-                if "uav_positions" in obs:
-                    next_obs["uav_positions"] = obs["uav_positions"]
-                if "full_density" in obs:
-                    next_obs["full_density"] = obs["full_density"]
-                if "observed_ratio" in obs:
-                    next_obs["observed_ratio"] = obs["observed_ratio"]
-                if "observed_area_ratio" in obs:
-                    next_obs["observed_area_ratio"] = obs["observed_area_ratio"]
-                if "service_ratio" in obs:
-                    next_obs["service_ratio"] = obs["service_ratio"]
-                if "total_power" in obs:
-                    next_obs["total_power"] = obs["total_power"]
 
                 if cfg.metric.log_level > 0 and "final_info" in info:
                     for i, agent_ep_info in enumerate(info["final_info"]):
@@ -387,59 +339,6 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                             if aggregator and "Game/ep_len_avg" in aggregator:
                                 aggregator.update("Game/ep_len_avg", ep_len)
                             fabric.print(f"Rank-0: policy_step={policy_step}, reward_env_{i}={ep_rew[-1]}")
-                
-                # 添加每200步的日志输出
-                if cfg.metric.log_level > 0 and policy_step % 200 == 0:
-                    # 准备记录的指标
-                    metrics_to_log = {
-                        "observed_ratio": None,
-                        "area_ratio": None,
-                        "reward": np.mean(rewards) if rewards.size > 0 else 0.0,
-                        "total_power": None,
-                        "served_people": None,
-                        "service_ratio": None
-                    }
-                    
-                    # 从info中提取信息
-                    if "observed_ratio" in info:
-                        ratios = info["observed_ratio"]
-                        if isinstance(ratios, list):
-                            ratios = np.array(ratios)
-                        metrics_to_log["observed_ratio"] = np.mean(ratios)
-                    
-                    if "observed_area_ratio" in info:
-                        area_ratios = info["observed_area_ratio"]
-                        if isinstance(area_ratios, list):
-                            area_ratios = np.array(area_ratios)
-                        metrics_to_log["area_ratio"] = np.mean(area_ratios)
-                    
-                    # 提取总功率和服务人数信息
-                    if "total_power" in info:
-                        total_power = info["total_power"]
-                        if isinstance(total_power, list):
-                            total_power = np.array(total_power)
-                        metrics_to_log["total_power"] = np.mean(total_power)
-                    
-                    if "served_people" in info:
-                        served_people = info["served_people"]
-                        if isinstance(served_people, list):
-                            served_people = np.array(served_people)
-                        metrics_to_log["served_people"] = np.mean(served_people)
-                    
-                    if "service_ratio" in info:
-                        service_ratio = info["service_ratio"]
-                        if isinstance(service_ratio, list):
-                            service_ratio = np.array(service_ratio)
-                        metrics_to_log["service_ratio"] = np.mean(service_ratio)
-                    
-                    # 记录日志
-                    fabric.print(f"Step {policy_step}: " + 
-                                f"Reward: {metrics_to_log['reward']:.4f}, " +
-                                (f"观测比例: {metrics_to_log['observed_ratio']:.4f}, " if metrics_to_log['observed_ratio'] is not None else "") +
-                                (f"区域比例: {metrics_to_log['area_ratio']:.4f}, " if metrics_to_log['area_ratio'] is not None else "") +
-                                (f"服务比例: {metrics_to_log['service_ratio']:.4f}, " if metrics_to_log['service_ratio'] is not None else "") +
-                                (f"总功率: {metrics_to_log['total_power']:.4f}, " if metrics_to_log['total_power'] is not None else "") +
-                                (f"服务人数: {metrics_to_log['served_people']:.4f}" if metrics_to_log['served_people'] is not None else ""))
 
         # Transform the data into PyTorch Tensors
         local_data = rb.to_tensor(dtype=None, device=device, from_numpy=cfg.buffer.from_numpy)
@@ -547,10 +446,8 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
         test(player, fabric, cfg, log_dir)
 
     if not cfg.model_manager.disabled and fabric.is_global_zero:
-        from sheeprl.algos.ppo_mod.utils import log_models
+        from sheeprl.algos.ppo.utils import log_models
+        from sheeprl.utils.mlflow import register_model
 
-        if _IS_MLFLOW_AVAILABLE:
-            import mlflow  # noqa
-
-            with mlflow.start_run(run_id=cfg.run.id, experiment_id=cfg.experiment.id) as _:
-                log_models(cfg, {"agent": agent}, cfg.run.id, cfg.experiment.id)
+        models_to_log = {"agent": agent}
+        register_model(fabric, log_models, cfg, models_to_log)
