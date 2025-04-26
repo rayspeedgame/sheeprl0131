@@ -20,7 +20,6 @@ class UAVEnvWrapper(gym.Env):
         self.db_dir = db_dir
         self.db_path = db_path
         self.db_list = None
-        self.current_db_index = 0
         self._update_db_list()
         
         # 环境参数
@@ -42,12 +41,18 @@ class UAVEnvWrapper(gym.Env):
             dtype=np.float32
         )
         
-        # 更新观测空间 - 仅包含人群密度信息
+        # 更新观测空间 - 包含人群密度信息和无人机位置
         self.observation_space = spaces.Dict({
             "density_matrix": spaces.Box(
                 low=0,
                 high=self.config["max_density"],
                 shape=(1, self.density_size, self.density_size),  # 添加通道维度
+                dtype=np.float32
+            ),
+            "uav_positions": spaces.Box(
+                low=self.boundary[0],
+                high=self.boundary[1],
+                shape=(self.n_uav * 3,),  # 一维化的无人机位置 [x1,y1,z1,x2,y2,z2,...,xn,yn,zn]
                 dtype=np.float32
             )
         })
@@ -113,24 +118,21 @@ class UAVEnvWrapper(gym.Env):
         if self.db_path not in self.db_list:
             self.db_list.append(self.db_path)
         
-        # 设置当前数据库索引
-        try:
-            self.current_db_index = self.db_list.index(self.db_path)
-        except ValueError:
-            self.current_db_index = 0
-            self.db_path = self.db_list[0]
-        
         print(f"加载数据库列表: {self.db_list}")
-        print(f"当前使用数据库: {self.db_path} (索引: {self.current_db_index})")
 
-    def _switch_to_next_db(self):
-        """切换到下一个数据库"""
-        self.current_db_index = (self.current_db_index + 1) % len(self.db_list)
-        self.db_path = self.db_list[self.current_db_index]
+    def _select_db_by_seed(self, seed):
+        """根据种子选择数据库"""
+        if not self.db_list or len(self.db_list) == 0:
+            return False
+        
+        # 根据种子选择数据库索引
+        db_index = seed % len(self.db_list)
+        self.db_path = self.db_list[db_index]
         self.db_finished = False
+        
         # 更新最大帧数
         self.max_frames = self._get_max_frame_from_db(self.db_path)
-        print(f"切换到新数据库: {self.db_path}，最大帧数: {self.max_frames}")
+        print(f"根据种子 {seed} 选择数据库: {self.db_path}，最大帧数: {self.max_frames}")
         return True
 
     def _get_info(self):
@@ -246,11 +248,13 @@ class UAVEnvWrapper(gym.Env):
             self.observed_area_ratio = 0
 
     def reset(self, seed=None, options=None):
-        # 重置环境前检查数据库是否已完成
-        if options is not None and options.get("switch_db", False):
-            self._switch_to_next_db()
-        elif self.db_finished:
-            self._switch_to_next_db()
+        # 使用种子选择数据库
+        if seed is not None:
+            self._select_db_by_seed(seed)
+            
+        # 设置随机种子
+        if seed is not None:
+            np.random.seed(seed)
         
         # 重置环境时间
         self.current_step = 10  # 根据需求初始化为10
@@ -273,10 +277,9 @@ class UAVEnvWrapper(gym.Env):
         # 更新环境状态和缓存值
         self._update_state()
         
-        # 如果更新后数据库标记为完成，则切换到下一个数据库并再次重置
+        # 如果更新后数据库标记为完成，直接返回终止信号
         if self.db_finished:
-            self._switch_to_next_db()
-            return self.reset(seed=seed)
+            print(f"数据库 {self.db_path} 已完成，等待重置")
         
         # 初始化能量和服务人数
         self.total_power, self.served_people = allocate_uav_service(
@@ -376,9 +379,10 @@ class UAVEnvWrapper(gym.Env):
         # 将密度矩阵增加一个通道维度 [height, width] -> [1, height, width]
         observed_density_with_channel = self.observed_density.astype(np.float32)[np.newaxis, :, :]
         
-        # 仅返回人群密度信息（带通道维度）
+        # 返回人群密度信息（带通道维度）和无人机位置
         return {
-            "density_matrix": observed_density_with_channel
+            "density_matrix": observed_density_with_channel,
+            "uav_positions": self.uav_positions.flatten().astype(np.float32)
         }
 
     def get_uav_positions(self):
