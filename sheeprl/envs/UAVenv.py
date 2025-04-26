@@ -332,7 +332,7 @@ class UAVEnvWrapper(gym.Env):
         self.service_ratio = self.served_people / self.total_people if self.total_people > 0 else 0
         
         # 奖励计算
-        decay_factor = np.exp(-0.01 * self.current_step)  # 指数衰减因子
+        decay_factor = np.exp(-0.001 * self.current_step)  # 指数衰减因子
         epsilon = 1e-6  # 防止除零
         
         # 特殊情况：如果没有人群，给予中性奖励
