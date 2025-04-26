@@ -315,6 +315,60 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                         # 如果有原始奖励值，也记录下来
                         aggregator.update("Metrics/reward", rewards.mean())
                     
+                    # 添加每200步的日志输出
+                    if cfg.metric.log_level > 0 and policy_step % 200 == 0 and fabric.is_global_zero:
+                        # 准备记录的指标
+                        metrics_to_log = {
+                            "observed_ratio": None,
+                            "area_ratio": None,
+                            "reward": np.mean(rewards) if rewards.size > 0 else 0.0,
+                            "total_power": None,
+                            "served_people": None,
+                            "service_ratio": None
+                        }
+                        
+                        # 从info中提取信息
+                        if "observed_ratio" in info and info["observed_ratio"] is not None:
+                            ratios = info["observed_ratio"]
+                            if isinstance(ratios, list):
+                                ratios = np.array(ratios)
+                            metrics_to_log["observed_ratio"] = np.mean(ratios)
+                        
+                        if "observed_area_ratio" in info and info["observed_area_ratio"] is not None:
+                            area_ratios = info["observed_area_ratio"]
+                            if isinstance(area_ratios, list):
+                                area_ratios = np.array(area_ratios)
+                            metrics_to_log["area_ratio"] = np.mean(area_ratios)
+                        
+                        # 提取总功率和服务人数信息
+                        if "total_power" in info and info["total_power"] is not None:
+                            total_power = info["total_power"]
+                            if isinstance(total_power, list):
+                                total_power = np.array(total_power)
+                            metrics_to_log["total_power"] = np.mean(total_power)
+                        
+                        if "served_people" in info and info["served_people"] is not None:
+                            served_people = info["served_people"]
+                            if isinstance(served_people, list):
+                                served_people = np.array(served_people)
+                            metrics_to_log["served_people"] = np.mean(served_people)
+                            
+                        if "service_ratio" in info and info["service_ratio"] is not None:
+                            service_ratio = info["service_ratio"]
+                            if isinstance(service_ratio, list):
+                                service_ratio = np.array(service_ratio)
+                            metrics_to_log["service_ratio"] = np.mean(service_ratio)
+                        
+                        # 构建日志消息
+                        log_message = f"Rank-0: policy_step={policy_step}"
+                        
+                        for metric_name, metric_value in metrics_to_log.items():
+                            if metric_value is not None:
+                                log_message += f", {metric_name}={metric_value:.4f}"
+                        
+                        # 输出日志
+                        fabric.print(log_message)
+                    
                     truncated_envs = np.nonzero(truncated)[0]
                     if len(truncated_envs) > 0:
                         real_next_obs = {
