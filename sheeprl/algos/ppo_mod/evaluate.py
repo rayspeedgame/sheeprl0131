@@ -12,8 +12,8 @@ from sheeprl.utils.logger import get_log_dir, get_logger
 from sheeprl.utils.registry import register_evaluation
 
 
-@register_evaluation(algorithms="ppo")
-def evaluate_ppo(fabric: Fabric, cfg: Dict[str, Any], state: Dict[str, Any]):
+@register_evaluation(algorithms="ppo_mod")
+def evaluate_ppo_mod(fabric: Fabric, cfg: Dict[str, Any], state: Dict[str, Any]):
     logger = get_logger(fabric, cfg)
     if logger and fabric.is_global_zero:
         fabric._loggers = [logger]
@@ -54,7 +54,4 @@ def evaluate_ppo(fabric: Fabric, cfg: Dict[str, Any], state: Dict[str, Any]):
     test(agent, fabric, cfg, log_dir)
 
 
-# This is just for showcase
-@register_evaluation(algorithms="ppo_decoupled")
-def evaluate_ppo_decoupled(fabric: Fabric, cfg: Dict[str, Any], state: Dict[str, Any]):
-    evaluate_ppo(fabric, cfg, state)
+

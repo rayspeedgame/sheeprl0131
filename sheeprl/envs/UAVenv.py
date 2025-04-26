@@ -50,8 +50,8 @@ class UAVEnvWrapper(gym.Env):
                 dtype=np.float32
             ),
             "uav_positions": spaces.Box(
-                low=np.tile(np.array([self.boundary[0], self.boundary[0], self.boundary[0]]), self.n_uav),
-                high=np.tile(np.array([self.boundary[1], self.boundary[1], self.boundary[1]]), self.n_uav),
+                low=np.tile(self.boundary[0], self.n_uav),
+                high=np.tile(self.boundary[1], self.n_uav),
                 shape=(self.n_uav * 3,),  # 一维化的无人机位置 [x1,y1,z1,x2,y2,z2,...,xn,yn,zn]
                 dtype=np.float32
             )
