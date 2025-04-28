@@ -31,7 +31,7 @@ algo:
     encoder: [density_matrix]
     decoder: ${algo.cnn_keys.encoder}
   mlp_keys:
-    encoder: []
+    encoder: [uav_positions]
     decoder: ${algo.mlp_keys.encoder}
   per_rank_batch_size: 256
 
